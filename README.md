@@ -8,7 +8,9 @@ Plataforma online de capacitação de supervisores. Ver `PROJECT_CONTEXT.md` par
 
 - Projeto Next.js 14 (App Router) + TypeScript, builda sem erros (`npm run build` testado).
 - Conexão server-side com Supabase (`src/lib/supabase/server.ts`) — nunca importável de um componente cliente (protegido por `server-only`).
-- Migration inicial (`supabase/migrations/0001_init.sql`), cópia fiel de `REFERENCE_DATABASE_SCHEMA.sql` — nenhuma regra foi alterada.
+- Migrations (`supabase/migrations/`):
+  - `0001_init.sql` — cópia fiel de `REFERENCE_DATABASE_SCHEMA.sql`, nenhuma regra alterada.
+  - `0002_service_role_grants.sql` — necessária quando a exposição automática de tabelas na Data API do Supabase está desabilitada no projeto. Sem isso, o `service_role` não tem privilégio sobre as tabelas e toda query falha (`/api/health` retornava `"step":"query"`). Idempotente, e cobre tabelas futuras via `ALTER DEFAULT PRIVILEGES`.
 - Camada de repositórios (`src/lib/repositories/*`) para as 7 tabelas do schema — só acesso a dados, sem regra de negócio (isso vem nas próximas fases).
 - Endpoint `/api/health` para confirmar que a conexão com o banco funciona.
 
@@ -19,7 +21,7 @@ Plataforma online de capacitação de supervisores. Ver `PROJECT_CONTEXT.md` par
 3. Copiar `.env.example` para `.env.local` e preencher:
    - `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` (painel → Project Settings → API)
    - `DATABASE_URL` (painel → Project Settings → Database → Connection string → URI)
-4. Aplicar a migration em `supabase/migrations/0001_init.sql` no seu banco. Duas formas:
+4. Aplicar as migrations em `supabase/migrations/` (0001, depois 0002) no seu banco. Duas formas:
    - **Supabase CLI**: `supabase link` + `supabase db push`
    - **Manual**: colar o conteúdo do arquivo no SQL Editor do painel Supabase e rodar.
 5. `npm run dev`
