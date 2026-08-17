@@ -1,0 +1,27 @@
+{
+  "perguntas": [
+    {
+      "id": "q1",
+      "pergunta": "Escreva aqui o enunciado da pergunta 1.",
+      "alternativas": [
+        { "id": "a", "texto": "Alternativa A" },
+        { "id": "b", "texto": "Alternativa B" },
+        { "id": "c", "texto": "Alternativa C" },
+        { "id": "d", "texto": "Alternativa D" }
+      ],
+      "correta": "a",
+      "explicacao": "Opcional: explique por que esta é a resposta correta. Remova este campo se não quiser usar explicação."
+    },
+    {
+      "id": "q2",
+      "pergunta": "Escreva aqui o enunciado da pergunta 2.",
+      "alternativas": [
+        { "id": "a", "texto": "Alternativa A" },
+        { "id": "b", "texto": "Alternativa B" },
+        { "id": "c", "texto": "Alternativa C" },
+        { "id": "d", "texto": "Alternativa D" }
+      ],
+      "correta": "b"
+    }
+  ]
+}
