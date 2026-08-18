@@ -2,10 +2,12 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getCurrentSession } from "@/lib/auth/getSession";
 import { getUserWithTrackById } from "@/lib/repositories/usersRepository";
+import { listActivePhases } from "@/lib/repositories/phasesRepository";
 import { listActiveModulesForTrack } from "@/lib/repositories/modulesRepository";
 import { listUserModules } from "@/lib/repositories/userModulesRepository";
 import { listAttemptsForUser } from "@/lib/repositories/quizAttemptsRepository";
 import { computeUserProgress } from "@/lib/services/userProgress";
+import { buildOrderedModules } from "@/lib/services/trilhaView";
 import { UserDetail } from "./UserDetail";
 
 export default async function UsuarioDetalhePage({ params }: { params: { id: string } }) {
@@ -16,19 +18,32 @@ export default async function UsuarioDetalhePage({ params }: { params: { id: str
   const user = await getUserWithTrackById(params.id);
   if (!user) notFound();
 
-  const [modules, userModules, attempts, progress] = await Promise.all([
+  const [phases, modules, userModules, attempts, progress] = await Promise.all([
+    listActivePhases(),
     listActiveModulesForTrack(user.track_id),
     listUserModules(user.id),
     listAttemptsForUser(user.id),
     computeUserProgress(user.id, user.track_id),
   ]);
 
-  const modulesDetail = modules.map((m) => {
+  // buildOrderedModules (já usada na Fase 6/7 para "Minha Trilha") ordena
+  // por ordem da FASE primeiro, depois ordem do módulo dentro dela — o
+  // que faltava aqui, causando Módulo 1 de fases diferentes agrupados
+  // (listActiveModulesForTrack só ordena pelo campo `ordem` do módulo,
+  // que reinicia a cada fase).
+  const orderedModules = buildOrderedModules(phases, modules);
+  const phaseById = new Map(phases.map((p) => [p.id, p]));
+
+  const modulesDetail = orderedModules.map((m) => {
     const um = userModules.find((x) => x.module_id === m.id);
+    const phase = phaseById.get(m.phase_id);
     return {
       module_id: m.id,
       nome: m.nome,
       ordem: m.ordem,
+      phase_id: m.phase_id,
+      phase_nome: phase?.nome ?? "—",
+      phase_ordem: phase?.ordem ?? 0,
       unlocked_at: um?.unlocked_at ?? null,
       material_accessed: um?.material_accessed ?? false,
       material_accessed_at: um?.material_accessed_at ?? null,

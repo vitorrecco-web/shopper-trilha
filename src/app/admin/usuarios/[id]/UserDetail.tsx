@@ -22,6 +22,9 @@ interface ModuleDetail {
   module_id: string;
   nome: string;
   ordem: number;
+  phase_id: string;
+  phase_nome: string;
+  phase_ordem: number;
   unlocked_at: string | null;
   material_accessed: boolean;
   material_accessed_at: string | null;
@@ -44,6 +47,25 @@ interface AttemptDetail {
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+
+/**
+ * A lista `modules` já chega do servidor ordenada por fase (ordem),
+ * depois módulo (ordem) — ver buildOrderedModules em trilhaView.ts. Aqui
+ * só agrupamos os itens consecutivos da mesma fase para exibição; não
+ * reordena nada de novo.
+ */
+function groupModulesByPhase(modules: ModuleDetail[]) {
+  const groups: { phase_id: string; phase_nome: string; phase_ordem: number; modules: ModuleDetail[] }[] = [];
+  for (const m of modules) {
+    const last = groups[groups.length - 1];
+    if (last && last.phase_id === m.phase_id) {
+      last.modules.push(m);
+    } else {
+      groups.push({ phase_id: m.phase_id, phase_nome: m.phase_nome, phase_ordem: m.phase_ordem, modules: [m] });
+    }
+  }
+  return groups;
 }
 
 const inputStyle: React.CSSProperties = {
@@ -299,7 +321,7 @@ export function UserDetail({
         </form>
       </section>
 
-      {/* Histórico de módulos */}
+      {/* Histórico de módulos, agrupado por fase */}
       <section style={sectionStyle}>
         <h2 style={{ fontSize: 15, marginTop: 0, marginBottom: 12 }}>Módulos</h2>
         {modules.length === 0 ? (
@@ -307,16 +329,33 @@ export function UserDetail({
             Nenhum módulo ativo para esta trilha ainda.
           </p>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {modules.map((m) => (
-              <div key={m.module_id} style={{ fontSize: 13, borderTop: "1px solid #22252b", paddingTop: 8 }}>
-                <b>
-                  {m.ordem}. {m.nome}
-                </b>
-                <div style={{ color: "#9aa0a6" }}>
-                  Material acessado: {m.material_accessed ? formatDate(m.material_accessed_at) : "não"} ·
-                  Concluído: {m.completed ? formatDate(m.completed_at) : "não"} · Melhor nota:{" "}
-                  {m.best_score ?? "—"}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {groupModulesByPhase(modules).map((group) => (
+              <div key={group.phase_id}>
+                <p
+                  style={{
+                    fontSize: 12,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.4,
+                    color: "#7F77DD",
+                    marginBottom: 6,
+                  }}
+                >
+                  Fase {group.phase_ordem} — {group.phase_nome}
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {group.modules.map((m) => (
+                    <div key={m.module_id} style={{ fontSize: 13, borderTop: "1px solid #22252b", paddingTop: 8 }}>
+                      <b>
+                        {m.ordem}. {m.nome}
+                      </b>
+                      <div style={{ color: "#9aa0a6" }}>
+                        Material acessado: {m.material_accessed ? formatDate(m.material_accessed_at) : "não"} ·
+                        Concluído: {m.completed ? formatDate(m.completed_at) : "não"} · Melhor nota:{" "}
+                        {m.best_score ?? "—"}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}

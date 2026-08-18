@@ -5,8 +5,10 @@ import { requireAdminOrRespond } from "@/lib/auth/apiGuard";
 import { getUserWithTrackById, updateUser } from "@/lib/repositories/usersRepository";
 import { listAttemptsForUser } from "@/lib/repositories/quizAttemptsRepository";
 import { listUserModules } from "@/lib/repositories/userModulesRepository";
+import { listActivePhases } from "@/lib/repositories/phasesRepository";
 import { listActiveModulesForTrack } from "@/lib/repositories/modulesRepository";
 import { computeUserProgress } from "@/lib/services/userProgress";
+import { buildOrderedModules } from "@/lib/services/trilhaView";
 import { isUniqueViolation } from "@/lib/utils/dbErrors";
 
 export async function GET(_request: Request, { params }: { params: { id: string } }) {
@@ -18,21 +20,33 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     return NextResponse.json({ ok: false, error: "Usuário não encontrado." }, { status: 404 });
   }
 
-  const [modules, userModules, attempts, progress] = await Promise.all([
+  const [phases, modules, userModules, attempts, progress] = await Promise.all([
+    listActivePhases(),
     listActiveModulesForTrack(user.track_id ?? null),
     listUserModules(user.id),
     listAttemptsForUser(user.id),
     computeUserProgress(user.id, user.track_id ?? null),
   ]);
 
+  // Ordenar por ordem da FASE, depois ordem do módulo dentro dela —
+  // listActiveModulesForTrack só ordena pelo campo `ordem` do módulo,
+  // que reinicia a cada fase (Módulo 1 de fases diferentes ficavam
+  // agrupados). buildOrderedModules já resolve isso (usada desde a Fase 6/7).
+  const orderedModules = buildOrderedModules(phases, modules);
+  const phaseById = new Map(phases.map((p) => [p.id, p]));
+
   // §13 — "Detalhe do usuário deve permitir consultar": módulo, material
   // acessado + data, concluído + data, tentativas, notas, melhor nota.
-  const modulesDetail = modules.map((m) => {
+  const modulesDetail = orderedModules.map((m) => {
     const um = userModules.find((x) => x.module_id === m.id);
+    const phase = phaseById.get(m.phase_id);
     return {
       module_id: m.id,
       nome: m.nome,
       ordem: m.ordem,
+      phase_id: m.phase_id,
+      phase_nome: phase?.nome ?? "—",
+      phase_ordem: phase?.ordem ?? 0,
       unlocked_at: um?.unlocked_at ?? null,
       material_accessed: um?.material_accessed ?? false,
       material_accessed_at: um?.material_accessed_at ?? null,
