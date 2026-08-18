@@ -1,6 +1,7 @@
 import "server-only";
 import { listActiveModulesForTrack } from "@/lib/repositories/modulesRepository";
 import { listUserModules } from "@/lib/repositories/userModulesRepository";
+export { computeTrackStatus, trackStatusLabel, type TrackStatus } from "./trackStatus";
 
 /**
  * §12 do PROJECT_CONTEXT: "A situação Concluída é calculada, não salva

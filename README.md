@@ -2,7 +2,7 @@
 
 Plataforma online de capacitação de supervisores. Ver `PROJECT_CONTEXT.md` para todas as regras de produto — este README é só sobre como rodar o que já existe.
 
-**Status atual: Fases 1 a 9 do `EXECUTION_PLAN.md` concluídas** (fundação + autenticação própria + administração de usuários + leitura do Drive + sincronização com prévia/confirmação + Minha Trilha + persistência de desbloqueio + página do módulo/PDF privado + quiz). O painel de acompanhamento avançado e o hardening de produção ainda **não existem** — isso é Fase 10 em diante.
+**Status atual: Fases 1 a 11 do `EXECUTION_PLAN.md` concluídas — V1 completa.** Ver "Débito técnico conhecido" abaixo para o que foi conscientemente simplificado ou adiado para uma V2.
 
 ## O que já existe
 
@@ -123,6 +123,79 @@ Como não há como testar contra o Drive/Supabase reais a partir daqui, a lógic
 - **Guards**: `/app/modulo/[id]`, `/api/modulos/[id]/pdf` e `/api/modulos/[id]/quiz` sem sessão retornam 307/401; com sessão válida, passam do guard e chegam à camada de banco.
 - **Bundle do cliente**: sem nenhuma ocorrência de segredo (`SUPABASE_SERVICE_ROLE_KEY`, `SESSION_SECRET`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REFRESH_TOKEN`).
 
+**Fase 10 — Painel de acompanhamento**
+- A tabela e o detalhe por usuário já existiam desde a Fase 3 (`/admin/usuarios`) com Nome, Matrícula, Trilha, CD, Turno, Progresso, Status e Último acesso, além de módulos/acessos/conclusão/notas/tentativas no detalhe — o que faltava era só o "status de trilha calculado" (tarefa 5) e filtros (tarefa 2).
+- `src/lib/services/trackStatus.ts` (novo, sem `server-only` — usado tanto no servidor quanto em Client Components) — deriva **Não iniciado / Em andamento / Concluída / Sem módulos** a partir do mesmo `percent` já calculado, nunca lido de uma flag salva (§12).
+- `/admin/usuarios` — nova coluna "Status da trilha" com badge colorido, e filtros por trilha e por status da conta (além da busca por nome/login/matrícula já existente).
+- `/admin/usuarios/[id]` — mesmo badge de status de trilha na seção de progresso.
+
+**Fase 11 — Hardening e publicação**
+- **Rate limiting no login** (`src/lib/auth/rateLimiter.ts`) — até 5 tentativas por IP a cada 5 minutos, em memória. Testado: a 6ª tentativa consecutiva recebe `429`. Limitação documentada abaixo (não é uma garantia global em ambiente serverless multi-instância).
+- **Tratamento de erros consolidado** — `requireActiveUserOrRespond` (novo, em `apiGuard.ts`) centraliza sessão + usuário ativo + erro de banco tratado, usado pelas rotas de PDF e quiz da Fase 8/9 (resolvendo o débito técnico que tinha sido anotado ali).
+- **Logs sem segredo** — auditados todos os `console.error` do projeto: nenhum imprime senha, corpo de requisição, cookie de sessão ou variável de ambiente: só o objeto de erro da biblioteca (Supabase/Drive), que nunca contém credenciais.
+- **Proteção de rotas** — já coberta desde as Fases 2-8 (middleware + revalidação em cada Server Component/Route Handler).
+- **Validação server-side** — `zod` em todas as rotas que recebem corpo (login, criação/edição de usuário, redefinição de senha, submissão de quiz).
+- **Vercel deploy + variáveis de ambiente de produção** — já em produção desde a Fase 1, validado a cada fase seguinte.
+- **Testes mobile** — não há como testar em um aparelho físico a partir daqui; a interface foi construída mobile-first desde a Fase 2 (viewport correto, containers com `max-width`, alvos de toque com padding generoso). Recomenda-se uma checagem visual manual em um celular real antes de divulgar a URL para os supervisores.
+- **Documentar processo de manutenção do Drive** — ver seção dedicada abaixo.
+
+## Como manter a Trilha pelo Google Drive
+
+Isto é para quem for adicionar/editar conteúdo depois — não precisa saber programar, só seguir a convenção de pastas.
+
+### Estrutura de pastas
+
+```
+Trilha de Liderança/                    <- pasta raiz (GOOGLE_DRIVE_ROOT_FOLDER_ID)
+├── Fase 1 - Conhecimento técnico/      <- "Fase N - assunto"
+│   ├── Supervisor de Picking/          <- uma pasta por função (só na Fase 1)
+│   │   ├── Módulo 1/
+│   │   │   ├── Nome do conteúdo.pdf    <- vira o título exibido ao aluno
+│   │   │   └── perguntas.json          <- opcional
+│   │   ├── Módulo 2/
+│   ├── Supervisor de Packing/
+├── Fase 2 - CLT e regras internas/     <- fase comum: módulos direto, sem função
+│   ├── Módulo 1/
+│   │   └── Nome do conteúdo.pdf
+```
+
+### Regras que o sistema espera
+
+- O nome da pasta da fase precisa começar com **"Fase N - "** (com um número e um hífen); o texto depois do hífen vira o nome exibido da fase.
+- O nome da pasta do módulo precisa começar com **"Módulo N"**; esse número só define a ordem — o **título exibido ao aluno vem do nome do arquivo PDF**, sem a extensão `.pdf`.
+- Cada módulo precisa ter **exatamente 1 PDF**. Se tiver 0 ou mais de 1, a sincronização mostra um aviso e não deixa o módulo pronto para publicar.
+- `perguntas.json` é opcional. Quando existe, precisa seguir exatamente o formato de `perguntas-modelo.json` (4 alternativas por pergunta, resposta certa apontando para o `id` de uma alternativa). Se o arquivo estiver malformado, a sincronização avisa e o módulo é publicado **sem** perguntas até alguém corrigir o arquivo — nunca quebra a trilha inteira.
+- Só a **Fase 1** tem a camada extra de "função" (Supervisor de Picking, de Packing, etc). Da Fase 2 em diante, os módulos ficam direto dentro da fase e valem para todo mundo.
+- Renomear ou reordenar uma pasta existente é seguro — o sistema identifica cada fase/módulo/trilha pelo ID interno do Drive, não pelo nome. Só **excluir uma pasta e criar outra do zero** é que conta como conteúdo novo.
+- Remover uma pasta (ou movê-la pra fora da estrutura) faz o conteúdo sumir da trilha dos alunos, mas o histórico de quem já tinha acessado/concluído continua no banco.
+
+### Como aplicar uma mudança
+
+1. Editar as pastas/arquivos no Drive como preferir (adicionar módulo, renomear fase, trocar o PDF, etc).
+2. No painel do Shopper Trilha, entrar em **Sincronizar com o Drive** (`/admin/sync`).
+3. Clicar em **Analisar** — isso só lê o Drive e mostra uma prévia, nada é gravado ainda.
+4. Conferir a lista de mudanças e os avisos. Se algo parecer errado, **Cancelar** e ajustar no Drive antes de tentar de novo — cancelar não altera nada no banco.
+5. Se estiver tudo certo, clicar em **Confirmar e aplicar**.
+
+Um módulo novo inserido no meio da trilha nunca desfaz o progresso de quem já passou por ali — ele entra como uma pendência a mais para quem ainda não chegou naquele ponto (§7.1).
+
+## Testes executados ao longo do projeto (resumo)
+
+Não foi configurado um framework de testes permanente (Jest/Vitest) no repositório — dado o tamanho da V1, cada fase teve sua lógica crítica validada com scripts de teste ad-hoc (fixtures em memória, sem depender de credenciais reais), rodados e conferidos antes de cada entrega:
+
+| Fase | O que foi testado | Resultado |
+|---|---|---|
+| 4 | Mapeamento da árvore do Drive (fase comum vs. por trilha, PDF ausente/duplicado, pasta fora do padrão) | 13/13 |
+| 5 | Diff Drive x banco (5 tipos de mudança simultâneos, inclusive "nada mudou") | 15/15 |
+| 5 | Validação de `perguntas.json` (1 caso válido + 5 inválidos) | 6/6 |
+| 6 | Montagem da trilha (desbloqueio sequencial, transição entre fases, progresso) | 18/18 |
+| 7 | Persistência de desbloqueio + módulo novo inserido no meio | 8/8 |
+| 9 | Correção do quiz (nota exata, ID vs. posição, embaralhamento, gabarito nunca exposto) | 11/11 |
+| 8+9 | Fluxo integrado completo (acesso → conclusão → desbloqueio → quiz → histórico) | 23/23 |
+| 11 | Rate limiting do login (6ª tentativa em 5 min recebe 429) | confirmado manualmente |
+
+Se o projeto crescer, formalizar isso com Vitest (rodando as mesmas fixtures já escritas, com pouco retrabalho) é a recomendação natural — hoje os testes existem como scripts descartáveis criados durante o desenvolvimento, não como parte do repositório.
+
 ## Setup local
 
 1. `npm install`
@@ -162,13 +235,14 @@ Como não há como testar contra o Drive/Supabase reais a partir daqui, a lógic
 - `/admin/sync` e `/api/admin/sync/**` sem sessão retornam 307/401. `applySyncPlan` não é atômico entre tabelas (ver débito técnico abaixo).
 - `/app` sem sessão retorna 307 para `/login`.
 
-## Débito técnico conhecido (revisar na Fase 11 — Hardening)
+## Débito técnico conhecido (para uma V2)
 
 - `next@14.2.35` ainda tem uma vulnerabilidade conhecida (GHSA-955p-x3mx-jcvp, exposição de endpoints internos de Server Functions) cuja correção definitiva exige Next 16 (major, breaking). Não fizemos esse salto para não introduzir mudança de arquitetura fora de escopo. Rodar `npm audit` para acompanhar.
 - Sessão assinada (iron-session) não é revalidada contra o banco a cada requisição no middleware (Edge) — se um admin inativar um usuário no meio de uma sessão válida, o middleware ainda deixa passar até o cookie expirar (7 dias). As páginas Server Component (`/app`, `/admin`) e o CRUD de usuários (Fase 3) devem reforçar essa checagem quando fizer sentido; por ora é um trade-off aceito de performance vs. revogação instantânea.
 - **PDF servido inteiro na memória do servidor** (`fetchDriveFileAsBuffer` carrega o arquivo todo antes de responder, sem streaming) — aceitável para os tamanhos de PDF de treinamento esperados aqui, mas não escala para arquivos muito grandes. Se algum PDF real ficar pesado, considerar `alt: "media"` com stream direto do Drive para a resposta em vez de bufferizar.
 - **`perguntas.json` é buscado no Drive a cada `GET`/`POST` do quiz** (uma vez para mostrar as perguntas, outra para corrigir) — sem cache. Como a Fase 5 já valida o arquivo na sincronização, isso é redundante na maior parte do tempo; para poucos usuários simultâneos não é um problema, mas é um ponto de latência/cota da API do Drive a observar se o uso crescer.
-- Erros inesperados de banco em `/api/modulos/[id]/pdf` e `/api/modulos/[id]/quiz` antes da checagem de autorização (ex: `getUserById` falhar) não têm um `try/catch` dedicado como o da rota de login — seguem o padrão das demais rotas administrativas (Next devolve um 500 vazio, sem vazar stack trace, mas sem mensagem amigável). Tratamento de erros mais consistente em todas as rotas é justamente a tarefa 6 da Fase 11.
+- **Rate limiting do login é em memória, por instância** — em ambiente serverless (Vercel), cada instância fria da função tem sua própria contagem; não é um limite globalmente garantido entre múltiplas instâncias simultâneas, só uma primeira barreira contra tentativas repetidas na mesma instância. Uma garantia real exigiria armazenamento compartilhado (ex: Redis/Upstash) — deixado de fora da V1 por não haver essa infraestrutura disponível ainda.
+- **Sem framework de testes formal no repositório** — a lógica crítica de cada fase foi validada com scripts ad-hoc durante o desenvolvimento (ver "Testes executados" acima), não com Jest/Vitest versionado. Migrar essas fixtures para testes de verdade é a recomendação mais simples de "dívida de qualidade" a pagar numa V2.
 - **Autenticação com o Google Drive via OAuth 2.0 + refresh token de uma conta corporativa (Fase 4), em vez de Service Account** — contorna o "domain-restricted sharing" do Workspace da Shopper, mas amarra o acesso da aplicação a uma pessoa específica. Se essa conta for desativada, tiver a senha trocada com revogação de sessões, ou o consentimento OAuth revogado, o refresh token para de funcionar e precisa ser gerado de novo (ver "Configurar o acesso ao Google Drive" acima). Melhoria de produção a considerar: Domain-Wide Delegation, que exige um super-admin do Workspace autorizar a Service Account a personificar um usuário do domínio.
 - **`applySyncPlan` (Fase 5) não é atômico** — o `supabase-js` fala com o Postgres via REST, sem suporte nativo a transações multi-tabela. Cada upsert/soft-delete é aplicado individualmente; se um item falhar no meio (ex: violação do índice único de ordem de fase), os itens já aplicados antes dele permanecem gravados, e a falha é reportada em `failures` no resultado + no `summary` do `sync_history`, mas a sincronização pode ficar parcialmente aplicada. Para uma V2, considerar mover a aplicação para uma função Postgres (`plpgsql`) chamada via RPC, que aí sim roda dentro de uma transação real.
 
@@ -224,6 +298,7 @@ src/
       trilhaViewService.ts           # busca fases/módulos/user_modules + monta a visão
       progressionService.ts           # persiste unlocked_at (Fase 7)
       moduleAccessService.ts           # autorização de acesso a módulo (Fase 8)
+      trackStatus.ts                    # status de trilha calculado, sem server-only (Fase 10)
     quiz/
       quizService.ts                    # busca/valida/embaralha/corrige o quiz (Fase 9)
     drive/
@@ -238,7 +313,8 @@ src/
       password.ts                 # hash/verify com bcrypt
       session.ts                   # config do iron-session (SessionData, cookie)
       getSession.ts                 # getCurrentSession / requireSession / requireAdminSession
-      apiGuard.ts                   # requireAdminOrRespond, para Route Handlers
+      apiGuard.ts                   # requireAdminOrRespond + requireActiveUserOrRespond, para Route Handlers
+      rateLimiter.ts                  # rate limiting básico do login em memória (Fase 11)
     utils/dbErrors.ts              # detecção de violação de unique do Postgres
   middleware.ts                    # guards de rota (/app, /admin, /api/admin), roda no Edge
 scripts/
@@ -249,7 +325,7 @@ supabase/
     0002_service_role_grants.sql
 ```
 
-## Próximos passos (Fase 10 do `EXECUTION_PLAN.md`)
+## V1 concluída
 
-Painel de acompanhamento: a tabela e o detalhe por usuário já existem desde a Fase 3 (`/admin/usuarios`) — falta revisar contra a lista exata de tarefas da Fase 10 (busca/filtros, status de trilha calculado) e preencher qualquer lacuna, agora que módulos/tentativas/conclusões reais existem para mostrar de verdade (antes da Fase 8/9, essas telas só mostravam "nenhum módulo ainda").
+As 11 fases do `EXECUTION_PLAN.md` estão implementadas e validadas em produção. Os itens em aberto estão listados em "Débito técnico conhecido" acima — nenhum deles bloqueia o uso real pelos supervisores, são todos candidatos a uma V2.
 

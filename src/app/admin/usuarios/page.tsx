@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentSession } from "@/lib/auth/getSession";
 import { listUsersWithTrack } from "@/lib/repositories/usersRepository";
-import { computeUserProgress } from "@/lib/services/userProgress";
+import { listActiveTracks } from "@/lib/repositories/tracksRepository";
+import { computeUserProgress, computeTrackStatus } from "@/lib/services/userProgress";
 import { LogoutButton } from "@/components/LogoutButton";
 import { UsersTable, type UserRow } from "./UsersTable";
 
@@ -11,20 +12,25 @@ export default async function UsuariosPage() {
   if (!session) redirect("/login");
   if (session.role !== "admin") redirect("/app");
 
-  const users = await listUsersWithTrack();
+  const [users, tracks] = await Promise.all([listUsersWithTrack(), listActiveTracks()]);
   const rows: UserRow[] = await Promise.all(
-    users.map(async (u) => ({
-      id: u.id,
-      nome_completo: u.nome_completo,
-      matricula: u.matricula,
-      login: u.login,
-      track_nome: u.track?.nome ?? "—",
-      cd: u.cd,
-      turno: u.turno,
-      status: u.status,
-      last_login_at: u.last_login_at,
-      progress: await computeUserProgress(u.id, u.track_id),
-    }))
+    users.map(async (u) => {
+      const progress = await computeUserProgress(u.id, u.track_id);
+      return {
+        id: u.id,
+        nome_completo: u.nome_completo,
+        matricula: u.matricula,
+        login: u.login,
+        track_id: u.track_id,
+        track_nome: u.track?.nome ?? "—",
+        cd: u.cd,
+        turno: u.turno,
+        status: u.status,
+        last_login_at: u.last_login_at,
+        progress,
+        trackStatus: computeTrackStatus(progress.percent),
+      };
+    })
   );
 
   return (
@@ -65,7 +71,7 @@ export default async function UsuariosPage() {
         </Link>
       </p>
 
-      <UsersTable initialUsers={rows} />
+      <UsersTable initialUsers={rows} tracks={tracks.map((t) => ({ id: t.id, nome: t.nome }))} />
     </main>
   );
 }

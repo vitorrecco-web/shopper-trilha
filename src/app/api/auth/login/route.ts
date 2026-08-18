@@ -5,21 +5,40 @@ import { getIronSession } from "iron-session";
 import { getSessionOptions, type SessionData } from "@/lib/auth/session";
 import { verifyPassword } from "@/lib/auth/password";
 import { getUserByLogin, touchLastLogin } from "@/lib/repositories/usersRepository";
+import { checkLoginRateLimit } from "@/lib/auth/rateLimiter";
 
 const loginSchema = z.object({
   login: z.string().trim().min(1, "Informe o login"),
   password: z.string().min(1, "Informe a senha"),
 });
 
+function getClientIp(request: NextRequest): string {
+  // Vercel injeta x-forwarded-for; em dev local cai no fallback.
+  const forwarded = request.headers.get("x-forwarded-for");
+  return forwarded?.split(",")[0]?.trim() || "unknown";
+}
+
 /**
- * Regras aplicadas aqui (PROJECT_CONTEXT §11, EXECUTION_PLAN Fase 2):
+ * Regras aplicadas aqui (PROJECT_CONTEXT §11, EXECUTION_PLAN Fase 2;
+ * rate limiting adicionado na Fase 11):
  * - login é único, case-insensitive (busca via ILIKE no repositório).
  * - usuário inativo não consegue logar.
  * - senha nunca é retornada em nenhuma resposta, em nenhum cenário.
  * - mensagem de erro genérica para login inexistente/senha errada,
  *   para não revelar quais logins existem no sistema.
+ * - até 5 tentativas por IP a cada 5 minutos (ver rateLimiter.ts para
+ *   a limitação conhecida em ambiente serverless).
  */
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  const rateLimit = checkLoginRateLimit(ip);
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { ok: false, error: "Muitas tentativas de login. Tente novamente em alguns minutos." },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds ?? 300) } }
+    );
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = loginSchema.safeParse(body);
 

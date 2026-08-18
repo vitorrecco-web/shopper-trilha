@@ -1,7 +1,6 @@
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession } from "@/lib/auth/getSession";
-import { getUserById } from "@/lib/repositories/usersRepository";
+import { requireActiveUserOrRespond } from "@/lib/auth/apiGuard";
 import { getModuleAccessInfo } from "@/lib/services/moduleAccessService";
 import { markMaterialAccessed, markCompletedWithoutQuiz } from "@/lib/repositories/userModulesRepository";
 import { unlockNextModule } from "@/lib/services/progressionService";
@@ -14,15 +13,9 @@ import { fetchDriveFileAsBuffer } from "@/lib/drive/googleDriveClient";
  * bloqueado não pode ser baixado nem por chamada direta a esta rota.
  */
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  const session = await getCurrentSession();
-  if (!session) {
-    return NextResponse.json({ ok: false, error: "Não autenticado." }, { status: 401 });
-  }
-
-  const user = await getUserById(session.userId);
-  if (!user || user.status === "inactive") {
-    return NextResponse.json({ ok: false, error: "Usuário inválido." }, { status: 401 });
-  }
+  const auth = await requireActiveUserOrRespond();
+  if ("response" in auth) return auth.response;
+  const { user } = auth;
 
   const access = await getModuleAccessInfo(user.id, user.track_id, params.id);
 

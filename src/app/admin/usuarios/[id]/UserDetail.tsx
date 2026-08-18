@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { UserProgress } from "@/lib/services/userProgress";
+import { computeTrackStatus, trackStatusLabel } from "@/lib/services/trackStatus";
 
 interface UserInfo {
   id: string;
@@ -166,7 +167,21 @@ export function UserDetail({
 
       {/* Progresso geral */}
       <section style={sectionStyle}>
-        <h2 style={{ fontSize: 15, marginTop: 0, marginBottom: 8 }}>Progresso</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <h2 style={{ fontSize: 15, margin: 0 }}>Progresso</h2>
+          <span
+            style={{
+              padding: "2px 10px",
+              borderRadius: 999,
+              fontSize: 12,
+              background: "#181a1f",
+              color: "#9aa0a6",
+              border: "1px solid #2a2d34",
+            }}
+          >
+            {trackStatusLabel[computeTrackStatus(progress.percent)]}
+          </span>
+        </div>
         {progress.percent === null ? (
           <p style={{ fontSize: 13, color: "#9aa0a6", margin: 0 }}>
             Ainda não há módulos ativos para esta trilha.

@@ -1,9 +1,8 @@
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getCurrentSession } from "@/lib/auth/getSession";
 import type { User } from "@/lib/db/types";
-import { getUserById } from "@/lib/repositories/usersRepository";
+import { requireActiveUserOrRespond } from "@/lib/auth/apiGuard";
 import { getModuleAccessInfo, type ModuleAccessInfo } from "@/lib/services/moduleAccessService";
 import { fetchAndValidateQuiz, toPublicQuiz, gradeSubmission } from "@/lib/quiz/quizService";
 import { recordQuizAttempt } from "@/lib/repositories/quizAttemptsRepository";
@@ -19,15 +18,9 @@ import { unlockNextModule } from "@/lib/services/progressionService";
 async function authorize(
   moduleId: string
 ): Promise<{ user: User; access: ModuleAccessInfo } | { error: NextResponse }> {
-  const session = await getCurrentSession();
-  if (!session) {
-    return { error: NextResponse.json({ ok: false, error: "Não autenticado." }, { status: 401 }) };
-  }
-
-  const user = await getUserById(session.userId);
-  if (!user || user.status === "inactive") {
-    return { error: NextResponse.json({ ok: false, error: "Usuário inválido." }, { status: 401 }) };
-  }
+  const auth = await requireActiveUserOrRespond();
+  if ("response" in auth) return { error: auth.response };
+  const { user } = auth;
 
   const access = await getModuleAccessInfo(user.id, user.track_id, moduleId);
   if (!access || !access.unlocked || !access.module.has_questions || !access.module.questions_drive_id) {
