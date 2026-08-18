@@ -2,7 +2,7 @@
 
 Plataforma online de capacitação de supervisores. Ver `PROJECT_CONTEXT.md` para todas as regras de produto — este README é só sobre como rodar o que já existe.
 
-**Status atual: Fases 1 a 5 do `EXECUTION_PLAN.md` concluídas** (fundação + autenticação própria + administração de usuários + leitura do Drive + sincronização com prévia/confirmação). A trilha do aluno (Minha Trilha) ainda **não existe** — isso é Fase 6 em diante.
+**Status atual: Fases 1 a 6 do `EXECUTION_PLAN.md` concluídas** (fundação + autenticação própria + administração de usuários + leitura do Drive + sincronização com prévia/confirmação + Minha Trilha). A regra de desbloqueio/progressão persistida e a página de módulo/PDF ainda **não existem** — isso é Fase 7 em diante.
 
 ## O que já existe
 
@@ -89,6 +89,13 @@ Nenhum compartilhamento novo de pasta é necessário — a conta usada no passo 
 - `POST /api/admin/sync/confirm` — recalcula o diff do zero (nunca confia num plano vindo do cliente, evita aplicar uma prévia desatualizada), aplica, e grava `sync_history` + uma linha em `sync_changes` por mudança.
 - `/admin/sync` — tela com botão "Analisar" (prévia), lista de mudanças coloridas por tipo, avisos, e os botões "Confirmar e aplicar" / "Cancelar".
 
+**Fase 6 — Minha Trilha**
+- `src/lib/services/trilhaView.ts` — lógica pura que monta a visão da trilha (accordion por fase, percentuais, módulo "atual") a partir de fases + módulos ativos + `user_modules` do aluno. A persistência de `unlocked_at`/progressão em si é da Fase 7 — aqui só computamos, em memória, o que mostrar. Já implementa a regra de não travar de novo um módulo com `unlocked_at` já persistido, mesmo que um módulo novo seja inserido antes dele (§7.1/§7.3) — testado com um fixture reproduzindo exatamente esse cenário, mais transição entre fases e progresso geral. **18/18 asserções passando.**
+- `src/lib/services/trilhaViewService.ts` — busca fases ativas + módulos ativos aplicáveis à trilha do usuário (`listActiveModulesForTrack` já filtra Fase 1 por `track_id` e inclui as fases comuns — nenhuma filtragem extra necessária) + `user_modules`, e chama a lógica pura acima.
+- `/app` — accordion mobile-first: progresso geral no topo, percentual por fase (não por módulo), módulo concluído com check, módulo atual destacado, módulo bloqueado com cadeado e nome visível, fase do próximo pendente aberta por padrão.
+- Percentuais são sempre calculados em runtime a partir de `modules`/`user_modules` — nunca lidos de um campo "progresso" salvo (§12).
+- Abrir um módulo (ler PDF, responder quiz) ainda não existe — isso é a Fase 7/8.
+
 ## Setup local
 
 1. `npm install`
@@ -126,6 +133,7 @@ Nenhum compartilhamento novo de pasta é necessário — a conta usada no passo 
 - `/admin/usuarios/**` e `/api/admin/**` sem sessão retornam 307 (páginas) ou 401 JSON (API); com sessão válida de admin (testado com cookie iron-session gerado manualmente), a requisição passa do guard e chega até a camada de banco.
 - `/api/admin/drive/preview` sem sessão retorna 401; sem credenciais do Google configuradas retorna 500 com mensagem clara (não crasha, não vaza stack trace).
 - `/admin/sync` e `/api/admin/sync/**` sem sessão retornam 307/401. `applySyncPlan` não é atômico entre tabelas (ver débito técnico abaixo).
+- `/app` sem sessão retorna 307 para `/login`.
 
 ## Débito técnico conhecido (revisar na Fase 11 — Hardening)
 
@@ -141,7 +149,8 @@ src/
   app/
     page.tsx                     # home — link para /login e /api/health
     login/page.tsx               # formulário de login (client component)
-    app/page.tsx                 # placeholder autenticado (student/admin)
+    app/page.tsx                 # Minha Trilha (dados reais, Fase 6)
+    app/TrilhaAccordion.tsx        # accordion mobile-first (Client Component)
     admin/
       page.tsx                   # painel do gestor (links)
       usuarios/
@@ -174,7 +183,10 @@ src/
     supabase/server.ts           # cliente Supabase server-side (service_role)
     db/types.ts                  # tipos espelhando o schema 1:1
     repositories/                # acesso a dados por tabela, sem regra de negócio
-    services/userProgress.ts      # progresso calculado em runtime (§12)
+    services/
+      userProgress.ts              # progresso calculado em runtime (§12, painel admin)
+      trilhaView.ts                 # lógica pura da visão da trilha (Fase 6)
+      trilhaViewService.ts           # busca fases/módulos/user_modules + monta a visão
     drive/
       googleDriveClient.ts        # autenticação + chamadas à API do Drive
       trilhaMapper.ts              # lógica pura de mapeamento da árvore
@@ -198,7 +210,7 @@ supabase/
     0002_service_role_grants.sql
 ```
 
-## Próximos passos (Fase 6 do `EXECUTION_PLAN.md`)
+## Próximos passos (Fase 7 do `EXECUTION_PLAN.md`)
 
-Minha Trilha: substituir a navegação fake atual por dados reais — carregar módulos aplicáveis ao usuário (fases comuns para todos + Fase 1 filtrada por `track_id`), accordion por fase com percentual (calculado em runtime, nunca salvo), progresso geral, check em concluídos, cadeado em bloqueados, mobile-first.
+Regra de desbloqueio e progresso: persistir `unlocked_at` de verdade (a Fase 6 só computa em memória para exibição), liberar o próximo módulo ao concluir o atual, liberar o primeiro módulo da próxima fase ao concluir o último da atual, e garantir que inserir um módulo novo no meio da trilha não apague nem revogue progresso antigo.
 
