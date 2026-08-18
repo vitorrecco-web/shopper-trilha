@@ -2,7 +2,7 @@
 
 Plataforma online de capacitação de supervisores. Ver `PROJECT_CONTEXT.md` para todas as regras de produto — este README é só sobre como rodar o que já existe.
 
-**Status atual: Fases 1, 2 e 3 do `EXECUTION_PLAN.md` concluídas** (fundação + autenticação própria + administração de usuários). Sincronização com o Drive e a trilha do aluno ainda **não existem** — isso é Fase 4 em diante.
+**Status atual: Fases 1, 2, 3 e 4 do `EXECUTION_PLAN.md` concluídas** (fundação + autenticação própria + administração de usuários + leitura do Drive). Sincronização com confirmação (gravar no banco) e a trilha do aluno ainda **não existem** — isso é Fase 5 em diante.
 
 ## O que já existe
 
@@ -30,6 +30,26 @@ Plataforma online de capacitação de supervisores. Ver `PROJECT_CONTEXT.md` par
 - `/admin/usuarios/[id]` — detalhe completo: dados cadastrais, progresso calculado em runtime (nunca salvo como flag — §12), edição de nome/CD/turno/login/status, redefinição de senha, histórico de módulos (material acessado, concluído, melhor nota) e histórico de tentativas de prova. **Trilha aparece só como leitura — não há campo para editá-la** (§11.3/§11.4: mudança de função exige novo cadastro).
 - API: `GET/POST /api/admin/users`, `GET/PATCH /api/admin/users/[id]`, `POST /api/admin/users/[id]/reset-password`, `GET /api/admin/tracks` — todas exigem `role=admin`, guardadas tanto no middleware quanto em cada rota (defesa em profundidade).
 - Login duplicado (case-insensitive) devolve erro 409 amigável em vez do erro cru do Postgres.
+
+**Fase 4 — Integração com Google Drive (só leitura)**
+- `src/lib/drive/googleDriveClient.ts` — autenticação via conta de serviço (JWT), nunca exposta ao cliente.
+- `src/lib/drive/trilhaMapper.ts` — lógica pura que percorre a árvore de pastas e monta fases/trilhas/módulos, seguindo a convenção do §5 (`Fase N - assunto`, `Módulo N`, nome do módulo = nome do PDF sem extensão). Testada com uma árvore fake replicando o exemplo do `PROJECT_CONTEXT.md` + casos de erro de propósito (módulo sem PDF, PDF duplicado, pasta fora do padrão) — 13/13 asserções passando.
+- `GET /api/admin/drive/preview` — lê o Drive agora e devolve a estrutura mapeada + avisos. **Não grava nada no banco** (isso é a Fase 5, com prévia e confirmação do admin).
+- `/admin/drive` — tela que mostra essa leitura (fases, trilhas, módulos, PDF presente/ausente, perguntas.json presente) e a lista de avisos.
+- Suporta tanto fases "comuns" (módulos direto na fase, ex: Fase 2 CLT) quanto fases "por trilha" (uma subpasta por função antes dos módulos, ex: Fase 1 Picking/Packing/...).
+
+### Configurar o acesso ao Google Drive
+
+1. No [Google Cloud Console](https://console.cloud.google.com), crie (ou reaproveite) um projeto.
+2. Ative a **Google Drive API** (menu "APIs e serviços" → "Ativar APIs e serviços").
+3. Crie uma **conta de serviço** ("IAM e administrador" → "Contas de serviço" → "Criar conta de serviço"). Não precisa de nenhuma permissão especial no projeto GCP.
+4. Nessa conta de serviço, crie uma **chave** tipo JSON e baixe o arquivo.
+5. No arquivo JSON baixado, copie:
+   - `client_email` → vira `GOOGLE_SERVICE_ACCOUNT_EMAIL`
+   - `private_key` → vira `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` (mantenha os `\n` como estão)
+6. No Google Drive, **compartilhe a pasta raiz "Trilha de Liderança"** com o e-mail da conta de serviço (o mesmo `client_email`), com permissão de **Leitor**. Sem esse compartilhamento, a API devolve "arquivo não encontrado" mesmo com credenciais corretas.
+7. Pegue o ID da pasta raiz pela URL do Drive (`.../folders/`**`ESSE_ID_AQUI`**) → vira `GOOGLE_DRIVE_ROOT_FOLDER_ID`.
+8. Adicione as 3 variáveis no `.env.local` (e depois na Vercel).
 
 ## Setup local
 
@@ -66,6 +86,7 @@ Plataforma online de capacitação de supervisores. Ver `PROJECT_CONTEXT.md` par
 - `password_hash` nunca é incluído em nenhuma resposta de API, em nenhum cenário (login, me, erro).
 - Testado localmente: `/app` e `/admin` sem sessão retornam 307 para `/login`; login com corpo inválido retorna 400; logout sem sessão não quebra (200); banco inacessível no login retorna 503 com mensagem genérica, sem vazar stack trace ao cliente.
 - `/admin/usuarios/**` e `/api/admin/**` sem sessão retornam 307 (páginas) ou 401 JSON (API); com sessão válida de admin (testado com cookie iron-session gerado manualmente), a requisição passa do guard e chega até a camada de banco.
+- `/api/admin/drive/preview` sem sessão retorna 401; sem credenciais do Google configuradas retorna 500 com mensagem clara (não crasha, não vaza stack trace).
 
 ## Débito técnico conhecido (revisar na Fase 11 — Hardening)
 
@@ -77,34 +98,57 @@ Plataforma online de capacitação de supervisores. Ver `PROJECT_CONTEXT.md` par
 ```
 src/
   app/
-    page.tsx                 # home — link para /login e /api/health
-    login/page.tsx           # formulário de login (client component)
-    app/page.tsx             # placeholder autenticado (student/admin)
-    admin/page.tsx           # placeholder admin
-    api/health/route.ts      # diagnóstico de conexão com o banco
-    api/auth/login/route.ts
-    api/auth/logout/route.ts
-    api/auth/me/route.ts
+    page.tsx                     # home — link para /login e /api/health
+    login/page.tsx               # formulário de login (client component)
+    app/page.tsx                 # placeholder autenticado (student/admin)
+    admin/
+      page.tsx                   # painel do gestor (links)
+      usuarios/
+        page.tsx                 # tabela de usuários
+        UsersTable.tsx
+        novo/page.tsx             # criar usuário
+        novo/NewUserForm.tsx
+        [id]/page.tsx             # detalhe/editar usuário
+        [id]/UserDetail.tsx
+      drive/
+        page.tsx                 # preview da estrutura do Drive
+        DrivePreviewPanel.tsx
+    api/
+      health/route.ts            # diagnóstico de conexão com o banco
+      auth/{login,logout,me}/route.ts
+      admin/
+        users/route.ts           # GET (listar) / POST (criar)
+        users/[id]/route.ts       # GET (detalhe) / PATCH (editar)
+        users/[id]/reset-password/route.ts
+        tracks/route.ts           # GET trilhas ativas
+        drive/preview/route.ts    # GET leitura do Drive (Fase 4)
   components/
     LogoutButton.tsx
   lib/
-    supabase/server.ts       # cliente Supabase server-side (service_role)
-    db/types.ts              # tipos espelhando o schema 1:1
-    repositories/            # acesso a dados por tabela, sem regra de negócio
+    supabase/server.ts           # cliente Supabase server-side (service_role)
+    db/types.ts                  # tipos espelhando o schema 1:1
+    repositories/                # acesso a dados por tabela, sem regra de negócio
+    services/userProgress.ts      # progresso calculado em runtime (§12)
+    drive/
+      googleDriveClient.ts        # autenticação + chamadas à API do Drive
+      trilhaMapper.ts              # lógica pura de mapeamento da árvore
+      types.ts
     auth/
-      password.ts            # hash/verify com bcrypt
-      session.ts              # config do iron-session (SessionData, cookie)
-      getSession.ts            # getCurrentSession / requireSession / requireAdminSession
-  middleware.ts               # guards de rota (/app, /admin), roda no Edge
+      password.ts                 # hash/verify com bcrypt
+      session.ts                   # config do iron-session (SessionData, cookie)
+      getSession.ts                 # getCurrentSession / requireSession / requireAdminSession
+      apiGuard.ts                   # requireAdminOrRespond, para Route Handlers
+    utils/dbErrors.ts              # detecção de violação de unique do Postgres
+  middleware.ts                    # guards de rota (/app, /admin, /api/admin), roda no Edge
 scripts/
-  seed-admin.mjs              # bootstrap do primeiro admin
+  seed-admin.mjs                  # bootstrap do primeiro admin
 supabase/
   migrations/
     0001_init.sql
     0002_service_role_grants.sql
 ```
 
-## Próximos passos (Fase 4 do `EXECUTION_PLAN.md`)
+## Próximos passos (Fase 5 do `EXECUTION_PLAN.md`)
 
-Integração com Google Drive: ler a estrutura privada da Trilha de Liderança (fases, funções, módulos, 1 PDF por módulo, `perguntas.json` opcional), usando os IDs do Drive como identidade permanente, sem nunca expor credenciais ao cliente.
+Prévia e confirmação de sincronização: comparar a leitura do Drive (já pronta na Fase 4) contra o que existe no banco, mostrar novos/removidos/renomeados/reordenados/avisos, e só gravar (`upsert`/`active=false`) depois do admin confirmar. Inclui validar `perguntas.json` quando existir, sem quebrar o módulo se for inválido (§8.1).
 

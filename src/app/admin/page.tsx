@@ -28,9 +28,14 @@ export default async function AdminHomePage() {
           Gerenciar usuários →
         </Link>
       </p>
+      <p style={{ fontSize: 14 }}>
+        <Link href="/admin/drive" style={{ color: "#4ECDC4" }}>
+          Ver estrutura do Drive →
+        </Link>
+      </p>
       <p style={{ color: "#9aa0a6", fontSize: 14 }}>
-        Sincronização com o Drive ainda não foi implementada — isso é a
-        Fase 4/5 do <code>EXECUTION_PLAN.md</code>.
+        Sincronização com confirmação (gravar no banco) ainda não foi
+        implementada — isso é a Fase 5 do <code>EXECUTION_PLAN.md</code>.
       </p>
     </main>
   );

@@ -12,6 +12,7 @@
   "dependencies": {
     "@supabase/supabase-js": "2.112.3",
     "bcryptjs": "2.4.3",
+    "googleapis": "^175.0.0",
     "iron-session": "8.0.4",
     "next": "14.2.35",
     "react": "18.3.1",
