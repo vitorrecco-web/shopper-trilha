@@ -114,9 +114,10 @@ export function getGoogleDriveLister(): DriveLister {
 }
 
 /**
- * Usado na Fase 5 (validar perguntas.json) e na Fase 9 (servir o PDF).
- * Não usado ainda pela Fase 4, mas já colocado aqui porque é a mesma
- * autenticação — evita duplicar a lógica de credenciais depois.
+ * Usado na Fase 5 (validar perguntas.json) e na Fase 9 (buscar
+ * perguntas.json para o quiz). Não usado ainda pela Fase 4, mas já
+ * colocado aqui porque é a mesma autenticação — evita duplicar a lógica
+ * de credenciais depois.
  */
 export async function fetchDriveFileAsText(fileId: string): Promise<string> {
   const auth = getAuth();
@@ -126,4 +127,15 @@ export async function fetchDriveFileAsText(fileId: string): Promise<string> {
     { responseType: "text" }
   );
   return res.data as unknown as string;
+}
+
+/** Usado na Fase 8 para servir o PDF do módulo (binário, não texto). */
+export async function fetchDriveFileAsBuffer(fileId: string): Promise<Buffer> {
+  const auth = getAuth();
+  const drive = google.drive({ version: "v3", auth });
+  const res = await drive.files.get(
+    { fileId, alt: "media", supportsAllDrives: true },
+    { responseType: "arraybuffer" }
+  );
+  return Buffer.from(res.data as ArrayBuffer);
 }

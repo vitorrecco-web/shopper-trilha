@@ -62,6 +62,24 @@ export async function markMaterialAccessed(userId: string, moduleId: string): Pr
 }
 
 /**
+ * §3.3 fluxo sem perguntas: "Acessar PDF -> concluir módulo -> liberar
+ * próximo". Dedicada (em vez de reaproveitar markPassedAndMaybeUpdateBestScore)
+ * porque não existe nota para um módulo sem quiz — best_score fica null.
+ * Idempotente: não sobrescreve completed_at se já estava concluído.
+ */
+export async function markCompletedWithoutQuiz(userId: string, moduleId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const current = await ensureUserModule(userId, moduleId);
+
+  const { error } = await supabase
+    .from("user_modules")
+    .update({ completed: true, completed_at: current.completed_at ?? new Date().toISOString() })
+    .eq("user_id", userId)
+    .eq("module_id", moduleId);
+  if (error) throw error;
+}
+
+/**
  * §4: após aprovação o módulo fica permanentemente concluído; tentativas
  * seguintes não revogam isso, e nota menor não substitui a melhor nota.
  * Esta função só marca completed=true (idempotente) e atualiza best_score

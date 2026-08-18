@@ -2,7 +2,7 @@
 
 Plataforma online de capacitação de supervisores. Ver `PROJECT_CONTEXT.md` para todas as regras de produto — este README é só sobre como rodar o que já existe.
 
-**Status atual: Fases 1 a 7 do `EXECUTION_PLAN.md` concluídas** (fundação + autenticação própria + administração de usuários + leitura do Drive + sincronização com prévia/confirmação + Minha Trilha + persistência de desbloqueio). A página do módulo (ler PDF, responder quiz) ainda **não existe** — isso é Fase 8 em diante.
+**Status atual: Fases 1 a 9 do `EXECUTION_PLAN.md` concluídas** (fundação + autenticação própria + administração de usuários + leitura do Drive + sincronização com prévia/confirmação + Minha Trilha + persistência de desbloqueio + página do módulo/PDF privado + quiz). O painel de acompanhamento avançado e o hardening de produção ainda **não existem** — isso é Fase 10 em diante.
 
 ## O que já existe
 
@@ -102,6 +102,27 @@ Nenhum compartilhamento novo de pasta é necessário — a conta usada no passo 
 - Testado com um cenário completo simulando um repositório em memória: aluno novo → libera 1º módulo → conclui → libera o próximo → conclui o último da fase → libera automaticamente o 1º da fase seguinte → **sincronização insere um módulo novo no meio** → os módulos já liberados mantêm o mesmo timestamp (não são regravados) → o módulo novo entra como pendência, só é liberado quando o aluno alcança ele na sequência (não é liberado por sincronização). **8/8 asserções passando.**
 - `buildOrderedModules` (extraída de `trilhaView.ts`, agora exportada) garante que a Fase 6 e a Fase 7 usam exatamente a mesma noção de "sequência global da trilha" — sem duplicar a lógica de ordenação.
 
+**Fase 8 — Página do módulo e PDF privado**
+- `src/lib/services/moduleAccessService.ts` — centraliza "esse módulo existe, é aplicável a este usuário, e está liberado" reaproveitando a mesma lógica de desbloqueio da Fase 6/7 (nunca há um módulo que apareça liberado em "Minha Trilha" e bloqueado aqui, ou vice-versa).
+- `GET /api/modulos/[id]/pdf` — só serve o PDF depois de validar sessão + autorização; resposta idêntica (404 "Módulo não disponível") tanto para módulo inexistente quanto para módulo bloqueado, para não revelar qual dos dois casos é. Primeiro acesso grava `material_accessed`/`material_accessed_at`; se o módulo não tem perguntas, o primeiro acesso já conclui o módulo e libera o próximo (reaproveitando `markCompletedWithoutQuiz` + `unlockNextModule` da Fase 7). Suporta `?download=1` para forçar `Content-Disposition: attachment` em vez de `inline`.
+- `/app/modulo/[id]` — página própria: volta para Minha Trilha, fase/módulo, visualizador (`<iframe>` apontando para a rota acima — o aluno nunca vê a URL do Drive), botão Baixar PDF, e a área de quiz (Fase 9) quando aplicável.
+- Módulo bloqueado acessado direto pela URL da página redireciona para `/app`; acessado direto pela URL da API de PDF/quiz recebe 404 — nunca serve o conteúdo.
+
+**Fase 9 — Quiz**
+- `src/lib/quiz/quizService.ts` — busca e valida `perguntas.json` (reaproveitando o validador da Fase 5), embaralha perguntas e alternativas a cada chamada (`toPublicQuiz`, que nunca inclui `correta` nem `explicacao`), e corrige no servidor (`gradeSubmission`, pura, sempre por ID de alternativa — nunca por posição).
+- `GET/POST /api/modulos/[id]/quiz` — GET devolve as perguntas embaralhadas sem gabarito, só depois do material já ter sido acessado (403 se não). POST corrige no servidor, grava `quiz_attempts` com o snapshot completo das perguntas usadas na correção, e só em caso de aprovação chama `markPassedAndMaybeUpdateBestScore` + `unlockNextModule` — uma tentativa reprovada nunca desmarca uma aprovação anterior nem abaixa a melhor nota (a função de repositório da Fase 1 já garante isso; aqui só não a chamamos em caso de reprovação).
+- Interface no módulo: perguntas em rádio button, resultado mostra acerto/erro por pergunta + explicação quando houver, botão "Ir para o próximo módulo" só aparece após aprovação — nunca avança automaticamente.
+
+## Testes executados (Fases 8 e 9)
+
+Como não há como testar contra o Drive/Supabase reais a partir daqui, a lógica foi validada com fixtures em memória, fora do projeto (mesmo padrão das fases anteriores):
+
+- **Correção do quiz** (11 asserções): nota exata em 100%/75%/50%, pergunta sem resposta enviada conta como errada, correção por ID independente da ordem de envio, explicação nula quando não existe, `toPublicQuiz` nunca expõe `correta`/`explicacao`, quantidade de perguntas/alternativas preservada, embaralhamento realmente varia entre chamadas.
+- **Fluxo integrado completo** (23 asserções): aluno novo → único módulo liberado → acessa PDF de um módulo sem quiz → conclui automaticamente → libera o próximo → módulo com quiz só libera a área de perguntas após acessar o material → tentativa reprovada não conclui nem libera o próximo → tentativa aprovada conclui e libera o próximo automaticamente → nova tentativa reprovada não desmarca a conclusão → nota mais baixa em tentativa posterior não substitui a melhor nota → histórico mantém todas as tentativas → módulo bloqueado (fase seguinte) não pode ser servido antes da hora → concluir o último módulo da trilha não aponta para nenhum próximo.
+- **Build e typecheck**: limpos.
+- **Guards**: `/app/modulo/[id]`, `/api/modulos/[id]/pdf` e `/api/modulos/[id]/quiz` sem sessão retornam 307/401; com sessão válida, passam do guard e chegam à camada de banco.
+- **Bundle do cliente**: sem nenhuma ocorrência de segredo (`SUPABASE_SERVICE_ROLE_KEY`, `SESSION_SECRET`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REFRESH_TOKEN`).
+
 ## Setup local
 
 1. `npm install`
@@ -145,6 +166,9 @@ Nenhum compartilhamento novo de pasta é necessário — a conta usada no passo 
 
 - `next@14.2.35` ainda tem uma vulnerabilidade conhecida (GHSA-955p-x3mx-jcvp, exposição de endpoints internos de Server Functions) cuja correção definitiva exige Next 16 (major, breaking). Não fizemos esse salto para não introduzir mudança de arquitetura fora de escopo. Rodar `npm audit` para acompanhar.
 - Sessão assinada (iron-session) não é revalidada contra o banco a cada requisição no middleware (Edge) — se um admin inativar um usuário no meio de uma sessão válida, o middleware ainda deixa passar até o cookie expirar (7 dias). As páginas Server Component (`/app`, `/admin`) e o CRUD de usuários (Fase 3) devem reforçar essa checagem quando fizer sentido; por ora é um trade-off aceito de performance vs. revogação instantânea.
+- **PDF servido inteiro na memória do servidor** (`fetchDriveFileAsBuffer` carrega o arquivo todo antes de responder, sem streaming) — aceitável para os tamanhos de PDF de treinamento esperados aqui, mas não escala para arquivos muito grandes. Se algum PDF real ficar pesado, considerar `alt: "media"` com stream direto do Drive para a resposta em vez de bufferizar.
+- **`perguntas.json` é buscado no Drive a cada `GET`/`POST` do quiz** (uma vez para mostrar as perguntas, outra para corrigir) — sem cache. Como a Fase 5 já valida o arquivo na sincronização, isso é redundante na maior parte do tempo; para poucos usuários simultâneos não é um problema, mas é um ponto de latência/cota da API do Drive a observar se o uso crescer.
+- Erros inesperados de banco em `/api/modulos/[id]/pdf` e `/api/modulos/[id]/quiz` antes da checagem de autorização (ex: `getUserById` falhar) não têm um `try/catch` dedicado como o da rota de login — seguem o padrão das demais rotas administrativas (Next devolve um 500 vazio, sem vazar stack trace, mas sem mensagem amigável). Tratamento de erros mais consistente em todas as rotas é justamente a tarefa 6 da Fase 11.
 - **Autenticação com o Google Drive via OAuth 2.0 + refresh token de uma conta corporativa (Fase 4), em vez de Service Account** — contorna o "domain-restricted sharing" do Workspace da Shopper, mas amarra o acesso da aplicação a uma pessoa específica. Se essa conta for desativada, tiver a senha trocada com revogação de sessões, ou o consentimento OAuth revogado, o refresh token para de funcionar e precisa ser gerado de novo (ver "Configurar o acesso ao Google Drive" acima). Melhoria de produção a considerar: Domain-Wide Delegation, que exige um super-admin do Workspace autorizar a Service Account a personificar um usuário do domínio.
 - **`applySyncPlan` (Fase 5) não é atômico** — o `supabase-js` fala com o Postgres via REST, sem suporte nativo a transações multi-tabela. Cada upsert/soft-delete é aplicado individualmente; se um item falhar no meio (ex: violação do índice único de ordem de fase), os itens já aplicados antes dele permanecem gravados, e a falha é reportada em `failures` no resultado + no `summary` do `sync_history`, mas a sincronização pode ficar parcialmente aplicada. Para uma V2, considerar mover a aplicação para uma função Postgres (`plpgsql`) chamada via RPC, que aí sim roda dentro de uma transação real.
 
@@ -157,6 +181,8 @@ src/
     login/page.tsx               # formulário de login (client component)
     app/page.tsx                 # Minha Trilha (dados reais, Fase 6)
     app/TrilhaAccordion.tsx        # accordion mobile-first (Client Component)
+    app/modulo/[id]/page.tsx        # página própria do módulo (Fase 8)
+    app/modulo/[id]/ModuloClient.tsx # visualizador PDF + quiz (Client Component)
     admin/
       page.tsx                   # painel do gestor (links)
       usuarios/
@@ -183,6 +209,9 @@ src/
         drive/preview/route.ts    # GET leitura do Drive (Fase 4)
         sync/preview/route.ts     # GET prévia da sincronização (Fase 5)
         sync/confirm/route.ts     # POST aplica a sincronização (Fase 5)
+      modulos/[id]/
+        pdf/route.ts               # GET serve o PDF privado (Fase 8)
+        quiz/route.ts               # GET perguntas embaralhadas / POST corrige (Fase 9)
   components/
     LogoutButton.tsx
   lib/
@@ -194,6 +223,9 @@ src/
       trilhaView.ts                 # lógica pura da visão da trilha (Fase 6) + buildOrderedModules (Fase 7)
       trilhaViewService.ts           # busca fases/módulos/user_modules + monta a visão
       progressionService.ts           # persiste unlocked_at (Fase 7)
+      moduleAccessService.ts           # autorização de acesso a módulo (Fase 8)
+    quiz/
+      quizService.ts                    # busca/valida/embaralha/corrige o quiz (Fase 9)
     drive/
       googleDriveClient.ts        # autenticação + chamadas à API do Drive
       trilhaMapper.ts              # lógica pura de mapeamento da árvore
@@ -217,7 +249,7 @@ supabase/
     0002_service_role_grants.sql
 ```
 
-## Próximos passos (Fase 8 do `EXECUTION_PLAN.md`)
+## Próximos passos (Fase 10 do `EXECUTION_PLAN.md`)
 
-Página do módulo e PDF privado: página própria por módulo, endpoint server-side que valida sessão e autorização antes de servir o PDF (o aluno nunca recebe a URL do Drive), visualizador embutido + botão Baixar, primeiro acesso registra `material_accessed`, e módulo sem perguntas conclui automaticamente no primeiro acesso (chamando `unlockNextModule` da Fase 7).
+Painel de acompanhamento: a tabela e o detalhe por usuário já existem desde a Fase 3 (`/admin/usuarios`) — falta revisar contra a lista exata de tarefas da Fase 10 (busca/filtros, status de trilha calculado) e preencher qualquer lacuna, agora que módulos/tentativas/conclusões reais existem para mostrar de verdade (antes da Fase 8/9, essas telas só mostravam "nenhum módulo ainda").
 

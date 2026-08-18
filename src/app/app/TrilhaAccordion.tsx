@@ -1,31 +1,44 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { TrilhaView } from "@/lib/services/trilhaView";
 
 function ModuleRow({ m }: { m: TrilhaView["phases"][number]["modules"][number] }) {
   const icon = m.completed ? "✓" : m.unlocked ? (m.isCurrent ? "▶" : "○") : "🔒";
   const iconColor = m.completed ? "#4ECDC4" : m.unlocked ? (m.isCurrent ? "#7F77DD" : "#9aa0a6") : "#5a5f68";
 
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "10px 12px",
-        borderRadius: 8,
-        background: m.isCurrent ? "#1a1830" : "transparent",
-        border: m.isCurrent ? "1px solid #7F77DD" : "1px solid transparent",
-        opacity: m.unlocked ? 1 : 0.6,
-      }}
-    >
+  const content = (
+    <>
       <span style={{ color: iconColor, fontSize: 14, width: 18, textAlign: "center" }}>{icon}</span>
       <span style={{ fontSize: 14, color: m.unlocked ? "#f2f2f2" : "#9aa0a6" }}>{m.nome}</span>
       {m.isCurrent && (
         <span style={{ marginLeft: "auto", fontSize: 11, color: "#7F77DD", whiteSpace: "nowrap" }}>continuar</span>
       )}
-    </div>
+    </>
+  );
+
+  const rowStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "10px 12px",
+    borderRadius: 8,
+    background: m.isCurrent ? "#1a1830" : "transparent",
+    border: m.isCurrent ? "1px solid #7F77DD" : "1px solid transparent",
+    opacity: m.unlocked ? 1 : 0.6,
+  };
+
+  // §10.1: módulo bloqueado continua mostrando nome/título, mas não é
+  // clicável — só módulo liberado abre a página própria (§10.3).
+  if (!m.unlocked) {
+    return <div style={rowStyle}>{content}</div>;
+  }
+
+  return (
+    <Link href={`/app/modulo/${m.id}`} style={{ ...rowStyle, textDecoration: "none" }}>
+      {content}
+    </Link>
   );
 }
 
@@ -101,11 +114,6 @@ export function TrilhaAccordion({ trilha, nome }: { trilha: TrilhaView; nome: st
           <PhaseAccordionItem key={phase.id} phase={phase} defaultOpen={phase.isDefaultOpen} />
         ))
       )}
-
-      <p style={{ fontSize: 12, color: "#5a5f68", marginTop: 16 }}>
-        Abrir um módulo para ler o material e responder o quiz ainda não foi implementado — isso é a
-        próxima fase.
-      </p>
     </div>
   );
 }
