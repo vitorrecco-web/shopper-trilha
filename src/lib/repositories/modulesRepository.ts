@@ -50,6 +50,14 @@ export async function listModulesByPhase(phaseId: string): Promise<Module[]> {
   return data as Module[];
 }
 
+/** Inclui inativos — usado pela sincronização (Fase 5) para reconciliar contra o Drive. */
+export async function listAllModules(): Promise<Module[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.from("modules").select("*").order("ordem", { ascending: true });
+  if (error) throw error;
+  return data as Module[];
+}
+
 /** Usado apenas pelo fluxo de sincronização (Fase 5). */
 export async function upsertModuleByDriveFolderId(input: {
   phase_id: string;

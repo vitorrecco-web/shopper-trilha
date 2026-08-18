@@ -14,6 +14,15 @@ export async function listActivePhases(): Promise<Phase[]> {
   return data as Phase[];
 }
 
+/** Inclui inativas — usado pela sincronização (Fase 5) para reconciliar contra o Drive. */
+export async function listAllPhases(): Promise<Phase[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.from("phases").select("*").order("ordem", { ascending: true });
+
+  if (error) throw error;
+  return data as Phase[];
+}
+
 export async function getPhaseByDriveFolderId(driveFolderId: string): Promise<Phase | null> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
@@ -52,4 +61,11 @@ export async function upsertPhaseByDriveFolderId(input: {
 
   if (error) throw error;
   return data as Phase;
+}
+
+/** Soft-delete conforme §7.2 — nunca excluir fisicamente. */
+export async function deactivatePhase(id: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from("phases").update({ active: false }).eq("id", id);
+  if (error) throw error;
 }

@@ -14,6 +14,15 @@ export async function listActiveTracks(): Promise<Track[]> {
   return data as Track[];
 }
 
+/** Inclui inativas — usado pela sincronização (Fase 5) para reconciliar contra o Drive. */
+export async function listAllTracks(): Promise<Track[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.from("tracks").select("*").order("nome", { ascending: true });
+
+  if (error) throw error;
+  return data as Track[];
+}
+
 export async function getTrackById(id: string): Promise<Track | null> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase.from("tracks").select("*").eq("id", id).maybeSingle();
@@ -55,4 +64,11 @@ export async function upsertTrackByDriveFolderId(input: {
 
   if (error) throw error;
   return data as Track;
+}
+
+/** Soft-delete conforme §7.2 — nunca excluir fisicamente. */
+export async function deactivateTrack(id: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from("tracks").update({ active: false }).eq("id", id);
+  if (error) throw error;
 }

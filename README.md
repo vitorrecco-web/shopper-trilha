@@ -2,7 +2,7 @@
 
 Plataforma online de capacitação de supervisores. Ver `PROJECT_CONTEXT.md` para todas as regras de produto — este README é só sobre como rodar o que já existe.
 
-**Status atual: Fases 1, 2, 3 e 4 do `EXECUTION_PLAN.md` concluídas** (fundação + autenticação própria + administração de usuários + leitura do Drive). Sincronização com confirmação (gravar no banco) e a trilha do aluno ainda **não existem** — isso é Fase 5 em diante.
+**Status atual: Fases 1 a 5 do `EXECUTION_PLAN.md` concluídas** (fundação + autenticação própria + administração de usuários + leitura do Drive + sincronização com prévia/confirmação). A trilha do aluno (Minha Trilha) ainda **não existe** — isso é Fase 6 em diante.
 
 ## O que já existe
 
@@ -81,6 +81,14 @@ Plataforma online de capacitação de supervisores. Ver `PROJECT_CONTEXT.md` par
 
 Nenhum compartilhamento novo de pasta é necessário — a conta usada no passo 8 já enxerga a pasta normalmente.
 
+**Fase 5 — Sincronização com prévia e confirmação**
+- `src/lib/sync/diffTrilha.ts` — lógica pura que compara a árvore lida do Drive contra o snapshot atual do banco (tracks/phases/modules, incluindo inativos) e produz a lista de mudanças (`added`/`removed`/`renamed`/`reordered`/`updated`) + avisos. Testada com um fixture cobrindo os 5 tipos de mudança simultaneamente (trilha nova, trilha removida, fase renomeada, módulo renomeado+reordenado+PDF trocado no mesmo módulo, módulo que ganhou perguntas, e o caso de "nada mudou") — 15/15 asserções passando.
+- `src/lib/drive/validatePerguntas.ts` — valida `perguntas.json` contra o formato de `perguntas-modelo.json` (exatamente 4 alternativas, resposta correta por ID, sem IDs de pergunta duplicados). JSON inválido gera aviso e o módulo é tratado como sem perguntas (§8.1) — nunca quebra a sincronização. Testado com 6 casos (1 válido, 5 inválidos) — todos corretos.
+- `src/lib/sync/driveSyncService.ts` — orquestra a parte de I/O: lê o Drive, valida `perguntas.json` de cada módulo, lê o banco, chama `diffTrilha`, e (só na confirmação) aplica os upserts/soft-deletes na ordem certa (tracks e phases antes de modules, por causa das FKs).
+- `GET /api/admin/sync/preview` — só leitura, **nenhuma gravação no banco**, nem mesmo um registro de auditoria (§8, "cancelar sem alterar banco" é literal). Mostra também a data da última sincronização.
+- `POST /api/admin/sync/confirm` — recalcula o diff do zero (nunca confia num plano vindo do cliente, evita aplicar uma prévia desatualizada), aplica, e grava `sync_history` + uma linha em `sync_changes` por mudança.
+- `/admin/sync` — tela com botão "Analisar" (prévia), lista de mudanças coloridas por tipo, avisos, e os botões "Confirmar e aplicar" / "Cancelar".
+
 ## Setup local
 
 1. `npm install`
@@ -117,12 +125,14 @@ Nenhum compartilhamento novo de pasta é necessário — a conta usada no passo 
 - Testado localmente: `/app` e `/admin` sem sessão retornam 307 para `/login`; login com corpo inválido retorna 400; logout sem sessão não quebra (200); banco inacessível no login retorna 503 com mensagem genérica, sem vazar stack trace ao cliente.
 - `/admin/usuarios/**` e `/api/admin/**` sem sessão retornam 307 (páginas) ou 401 JSON (API); com sessão válida de admin (testado com cookie iron-session gerado manualmente), a requisição passa do guard e chega até a camada de banco.
 - `/api/admin/drive/preview` sem sessão retorna 401; sem credenciais do Google configuradas retorna 500 com mensagem clara (não crasha, não vaza stack trace).
+- `/admin/sync` e `/api/admin/sync/**` sem sessão retornam 307/401. `applySyncPlan` não é atômico entre tabelas (ver débito técnico abaixo).
 
 ## Débito técnico conhecido (revisar na Fase 11 — Hardening)
 
 - `next@14.2.35` ainda tem uma vulnerabilidade conhecida (GHSA-955p-x3mx-jcvp, exposição de endpoints internos de Server Functions) cuja correção definitiva exige Next 16 (major, breaking). Não fizemos esse salto para não introduzir mudança de arquitetura fora de escopo. Rodar `npm audit` para acompanhar.
 - Sessão assinada (iron-session) não é revalidada contra o banco a cada requisição no middleware (Edge) — se um admin inativar um usuário no meio de uma sessão válida, o middleware ainda deixa passar até o cookie expirar (7 dias). As páginas Server Component (`/app`, `/admin`) e o CRUD de usuários (Fase 3) devem reforçar essa checagem quando fizer sentido; por ora é um trade-off aceito de performance vs. revogação instantânea.
 - **Autenticação com o Google Drive via OAuth 2.0 + refresh token de uma conta corporativa (Fase 4), em vez de Service Account** — contorna o "domain-restricted sharing" do Workspace da Shopper, mas amarra o acesso da aplicação a uma pessoa específica. Se essa conta for desativada, tiver a senha trocada com revogação de sessões, ou o consentimento OAuth revogado, o refresh token para de funcionar e precisa ser gerado de novo (ver "Configurar o acesso ao Google Drive" acima). Melhoria de produção a considerar: Domain-Wide Delegation, que exige um super-admin do Workspace autorizar a Service Account a personificar um usuário do domínio.
+- **`applySyncPlan` (Fase 5) não é atômico** — o `supabase-js` fala com o Postgres via REST, sem suporte nativo a transações multi-tabela. Cada upsert/soft-delete é aplicado individualmente; se um item falhar no meio (ex: violação do índice único de ordem de fase), os itens já aplicados antes dele permanecem gravados, e a falha é reportada em `failures` no resultado + no `summary` do `sync_history`, mas a sincronização pode ficar parcialmente aplicada. Para uma V2, considerar mover a aplicação para uma função Postgres (`plpgsql`) chamada via RPC, que aí sim roda dentro de uma transação real.
 
 ## Estrutura
 
@@ -144,6 +154,9 @@ src/
       drive/
         page.tsx                 # preview da estrutura do Drive
         DrivePreviewPanel.tsx
+      sync/
+        page.tsx                 # sincronização com prévia/confirmação
+        SyncPanel.tsx
     api/
       health/route.ts            # diagnóstico de conexão com o banco
       auth/{login,logout,me}/route.ts
@@ -153,6 +166,8 @@ src/
         users/[id]/reset-password/route.ts
         tracks/route.ts           # GET trilhas ativas
         drive/preview/route.ts    # GET leitura do Drive (Fase 4)
+        sync/preview/route.ts     # GET prévia da sincronização (Fase 5)
+        sync/confirm/route.ts     # POST aplica a sincronização (Fase 5)
   components/
     LogoutButton.tsx
   lib/
@@ -163,7 +178,11 @@ src/
     drive/
       googleDriveClient.ts        # autenticação + chamadas à API do Drive
       trilhaMapper.ts              # lógica pura de mapeamento da árvore
+      validatePerguntas.ts          # validação de perguntas.json (§4, §8.1)
       types.ts
+    sync/
+      diffTrilha.ts                 # lógica pura de diff Drive x banco
+      driveSyncService.ts            # orquestra I/O (Drive + banco) em volta do diff
     auth/
       password.ts                 # hash/verify com bcrypt
       session.ts                   # config do iron-session (SessionData, cookie)
@@ -179,7 +198,7 @@ supabase/
     0002_service_role_grants.sql
 ```
 
-## Próximos passos (Fase 5 do `EXECUTION_PLAN.md`)
+## Próximos passos (Fase 6 do `EXECUTION_PLAN.md`)
 
-Prévia e confirmação de sincronização: comparar a leitura do Drive (já pronta na Fase 4) contra o que existe no banco, mostrar novos/removidos/renomeados/reordenados/avisos, e só gravar (`upsert`/`active=false`) depois do admin confirmar. Inclui validar `perguntas.json` quando existir, sem quebrar o módulo se for inválido (§8.1).
+Minha Trilha: substituir a navegação fake atual por dados reais — carregar módulos aplicáveis ao usuário (fases comuns para todos + Fase 1 filtrada por `track_id`), accordion por fase com percentual (calculado em runtime, nunca salvo), progresso geral, check em concluídos, cadeado em bloqueados, mobile-first.
 
