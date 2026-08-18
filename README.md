@@ -2,7 +2,7 @@
 
 Plataforma online de capacitação de supervisores. Ver `PROJECT_CONTEXT.md` para todas as regras de produto — este README é só sobre como rodar o que já existe.
 
-**Status atual: Fases 1 e 2 do `EXECUTION_PLAN.md` concluídas** (fundação + autenticação própria). Minha Trilha, CRUD de usuários, quiz e sincronização com o Drive ainda **não existem** — isso é Fase 3 em diante.
+**Status atual: Fases 1, 2 e 3 do `EXECUTION_PLAN.md` concluídas** (fundação + autenticação própria + administração de usuários). Sincronização com o Drive e a trilha do aluno ainda **não existem** — isso é Fase 4 em diante.
 
 ## O que já existe
 
@@ -23,6 +23,13 @@ Plataforma online de capacitação de supervisores. Ver `PROJECT_CONTEXT.md` par
 - `src/middleware.ts` — guarda `/app/**` (qualquer sessão válida) e `/admin/**` (só `role=admin`), roda no Edge.
 - Páginas: `/login`, `/app` (placeholder autenticado), `/admin` (placeholder admin) — cada uma revalida a sessão de novo no Server Component, não confia só no middleware (defesa em profundidade).
 - `scripts/seed-admin.mjs` — cria o primeiro usuário admin direto no banco (não existe cadastro público nem CRUD ainda — isso é Fase 3).
+
+**Fase 3 — Administração de usuários**
+- `/admin/usuarios` — tabela responsiva (Nome, Matrícula, Trilha, CD, Turno, Progresso, Status, Último acesso), com busca por nome/login/matrícula e ativar/inativar inline.
+- `/admin/usuarios/novo` — criação de usuário (nome, matrícula, login, senha, trilha, CD, turno, status). Trilha vem de `GET /api/admin/tracks` (só trilhas `active=true`) — se não houver nenhuma trilha ativa ainda (antes da Fase 4/5 popular via Drive), a tela avisa e bloqueia a criação.
+- `/admin/usuarios/[id]` — detalhe completo: dados cadastrais, progresso calculado em runtime (nunca salvo como flag — §12), edição de nome/CD/turno/login/status, redefinição de senha, histórico de módulos (material acessado, concluído, melhor nota) e histórico de tentativas de prova. **Trilha aparece só como leitura — não há campo para editá-la** (§11.3/§11.4: mudança de função exige novo cadastro).
+- API: `GET/POST /api/admin/users`, `GET/PATCH /api/admin/users/[id]`, `POST /api/admin/users/[id]/reset-password`, `GET /api/admin/tracks` — todas exigem `role=admin`, guardadas tanto no middleware quanto em cada rota (defesa em profundidade).
+- Login duplicado (case-insensitive) devolve erro 409 amigável em vez do erro cru do Postgres.
 
 ## Setup local
 
@@ -58,6 +65,7 @@ Plataforma online de capacitação de supervisores. Ver `PROJECT_CONTEXT.md` par
 - Nenhuma variável de ambiente usa o prefixo `NEXT_PUBLIC_`.
 - `password_hash` nunca é incluído em nenhuma resposta de API, em nenhum cenário (login, me, erro).
 - Testado localmente: `/app` e `/admin` sem sessão retornam 307 para `/login`; login com corpo inválido retorna 400; logout sem sessão não quebra (200); banco inacessível no login retorna 503 com mensagem genérica, sem vazar stack trace ao cliente.
+- `/admin/usuarios/**` e `/api/admin/**` sem sessão retornam 307 (páginas) ou 401 JSON (API); com sessão válida de admin (testado com cookie iron-session gerado manualmente), a requisição passa do guard e chega até a camada de banco.
 
 ## Débito técnico conhecido (revisar na Fase 11 — Hardening)
 
@@ -96,7 +104,7 @@ supabase/
     0002_service_role_grants.sql
 ```
 
-## Próximos passos (Fase 3 do `EXECUTION_PLAN.md`)
+## Próximos passos (Fase 4 do `EXECUTION_PLAN.md`)
 
-CRUD de usuários pelo admin: criar, editar (nome/CD/turno/login/status — nunca a trilha), redefinir senha, ativar/inativar, ver detalhe. Login único case-insensitive já garantido pelo índice da migration; matrícula pode repetir.
+Integração com Google Drive: ler a estrutura privada da Trilha de Liderança (fases, funções, módulos, 1 PDF por módulo, `perguntas.json` opcional), usando os IDs do Drive como identidade permanente, sem nunca expor credenciais ao cliente.
 

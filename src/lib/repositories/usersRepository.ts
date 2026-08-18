@@ -30,6 +30,34 @@ export async function getUserById(id: string): Promise<User | null> {
   return data as User | null;
 }
 
+export interface UserWithTrack extends User {
+  track: { id: string; nome: string } | null;
+}
+
+/** Usado pela tabela do painel admin (§13) — já traz o nome da trilha via join. */
+export async function listUsersWithTrack(): Promise<UserWithTrack[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("users")
+    .select("*, track:tracks(id, nome)")
+    .order("nome_completo", { ascending: true });
+
+  if (error) throw error;
+  return data as unknown as UserWithTrack[];
+}
+
+export async function getUserWithTrackById(id: string): Promise<UserWithTrack | null> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("users")
+    .select("*, track:tracks(id, nome)")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as unknown as UserWithTrack | null;
+}
+
 export async function listUsers(filters?: {
   trackId?: string;
   status?: User["status"];
@@ -54,6 +82,7 @@ export interface CreateUserInput {
   cd?: string | null;
   turno?: string | null;
   role?: User["role"];
+  status?: User["status"];
 }
 
 export async function createUser(input: CreateUserInput): Promise<User> {
@@ -69,7 +98,7 @@ export async function createUser(input: CreateUserInput): Promise<User> {
       cd: input.cd ?? null,
       turno: input.turno ?? null,
       role: input.role ?? "student",
-      status: "active",
+      status: input.status ?? "active",
     })
     .select("*")
     .single();

@@ -29,6 +29,17 @@ export async function recordQuizAttempt(input: RecordAttemptInput): Promise<Quiz
   return data as QuizAttempt;
 }
 
+export async function listAttemptsForUser(userId: string): Promise<QuizAttempt[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("quiz_attempts")
+    .select("*")
+    .eq("user_id", userId)
+    .order("started_at", { ascending: false });
+  if (error) throw error;
+  return data as QuizAttempt[];
+}
+
 export async function listAttemptsForUserModule(
   userId: string,
   moduleId: string

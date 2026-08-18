@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getCurrentSession } from "@/lib/auth/getSession";
 import { LogoutButton } from "@/components/LogoutButton";
 
@@ -22,11 +23,14 @@ export default async function AdminHomePage() {
       <p style={{ color: "#9aa0a6", fontSize: 14 }}>
         Olá, {session?.nome} — acesso administrativo confirmado.
       </p>
+      <p style={{ fontSize: 14 }}>
+        <Link href="/admin/usuarios" style={{ color: "#4ECDC4" }}>
+          Gerenciar usuários →
+        </Link>
+      </p>
       <p style={{ color: "#9aa0a6", fontSize: 14 }}>
-        CRUD de usuários e sincronização com o Drive ainda não foram
-        implementados — isso é a Fase 3 e a Fase 5 do{" "}
-        <code>EXECUTION_PLAN.md</code>. Esta página confirma apenas que o
-        guard de rota restrito a <b>admin</b> está funcionando.
+        Sincronização com o Drive ainda não foi implementada — isso é a
+        Fase 4/5 do <code>EXECUTION_PLAN.md</code>.
       </p>
     </main>
   );
