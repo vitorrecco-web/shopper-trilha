@@ -2,7 +2,7 @@
 
 Plataforma online de capacitação de supervisores. Ver `PROJECT_CONTEXT.md` para todas as regras de produto — este README é só sobre como rodar o que já existe.
 
-**Status atual: Fases 1 a 6 do `EXECUTION_PLAN.md` concluídas** (fundação + autenticação própria + administração de usuários + leitura do Drive + sincronização com prévia/confirmação + Minha Trilha). A regra de desbloqueio/progressão persistida e a página de módulo/PDF ainda **não existem** — isso é Fase 7 em diante.
+**Status atual: Fases 1 a 7 do `EXECUTION_PLAN.md` concluídas** (fundação + autenticação própria + administração de usuários + leitura do Drive + sincronização com prévia/confirmação + Minha Trilha + persistência de desbloqueio). A página do módulo (ler PDF, responder quiz) ainda **não existe** — isso é Fase 8 em diante.
 
 ## O que já existe
 
@@ -96,6 +96,12 @@ Nenhum compartilhamento novo de pasta é necessário — a conta usada no passo 
 - Percentuais são sempre calculados em runtime a partir de `modules`/`user_modules` — nunca lidos de um campo "progresso" salvo (§12).
 - Abrir um módulo (ler PDF, responder quiz) ainda não existe — isso é a Fase 7/8.
 
+**Fase 7 — Regra de desbloqueio e progresso**
+- `src/lib/services/progressionService.ts` — `ensureFirstModuleUnlocked` (chamada pela Fase 6 toda vez que "Minha Trilha" é carregada — idempotente, só grava na primeira vez) e `unlockNextModule` (pronta para ser chamada pela Fase 8, quando um módulo sem perguntas é concluído, e pela Fase 9, quando o quiz é aprovado — ainda sem nenhuma UI chamando, porque essa UI só existe a partir da Fase 8).
+- Usa o repositório `markUnlocked` (já existente desde a Fase 1) — idempotente por natureza (`WHERE unlocked_at IS NULL` no update), o que garante §7.1/§7.3: inserir um módulo novo antes de um já desbloqueado não trava ele de novo.
+- Testado com um cenário completo simulando um repositório em memória: aluno novo → libera 1º módulo → conclui → libera o próximo → conclui o último da fase → libera automaticamente o 1º da fase seguinte → **sincronização insere um módulo novo no meio** → os módulos já liberados mantêm o mesmo timestamp (não são regravados) → o módulo novo entra como pendência, só é liberado quando o aluno alcança ele na sequência (não é liberado por sincronização). **8/8 asserções passando.**
+- `buildOrderedModules` (extraída de `trilhaView.ts`, agora exportada) garante que a Fase 6 e a Fase 7 usam exatamente a mesma noção de "sequência global da trilha" — sem duplicar a lógica de ordenação.
+
 ## Setup local
 
 1. `npm install`
@@ -185,8 +191,9 @@ src/
     repositories/                # acesso a dados por tabela, sem regra de negócio
     services/
       userProgress.ts              # progresso calculado em runtime (§12, painel admin)
-      trilhaView.ts                 # lógica pura da visão da trilha (Fase 6)
+      trilhaView.ts                 # lógica pura da visão da trilha (Fase 6) + buildOrderedModules (Fase 7)
       trilhaViewService.ts           # busca fases/módulos/user_modules + monta a visão
+      progressionService.ts           # persiste unlocked_at (Fase 7)
     drive/
       googleDriveClient.ts        # autenticação + chamadas à API do Drive
       trilhaMapper.ts              # lógica pura de mapeamento da árvore
@@ -210,7 +217,7 @@ supabase/
     0002_service_role_grants.sql
 ```
 
-## Próximos passos (Fase 7 do `EXECUTION_PLAN.md`)
+## Próximos passos (Fase 8 do `EXECUTION_PLAN.md`)
 
-Regra de desbloqueio e progresso: persistir `unlocked_at` de verdade (a Fase 6 só computa em memória para exibição), liberar o próximo módulo ao concluir o atual, liberar o primeiro módulo da próxima fase ao concluir o último da atual, e garantir que inserir um módulo novo no meio da trilha não apague nem revogue progresso antigo.
+Página do módulo e PDF privado: página própria por módulo, endpoint server-side que valida sessão e autorização antes de servir o PDF (o aluno nunca recebe a URL do Drive), visualizador embutido + botão Baixar, primeiro acesso registra `material_accessed`, e módulo sem perguntas conclui automaticamente no primeiro acesso (chamando `unlockNextModule` da Fase 7).
 

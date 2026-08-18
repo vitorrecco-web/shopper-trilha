@@ -48,6 +48,31 @@ export interface TrilhaView {
   overallPercent: number;
 }
 
+/**
+ * Sequência global (fase, depois módulo) — usada tanto para computar a
+ * visão da trilha (abaixo) quanto pelo serviço de progressão da Fase 7
+ * (`progressionService.ts`), que decide qual módulo liberar a seguir.
+ */
+export function buildOrderedModules(phases: Phase[], modules: Module[]): Module[] {
+  const modulesByPhaseId = new Map<string, Module[]>();
+  for (const m of modules) {
+    const list = modulesByPhaseId.get(m.phase_id) ?? [];
+    list.push(m);
+    modulesByPhaseId.set(m.phase_id, list);
+  }
+  for (const list of modulesByPhaseId.values()) {
+    list.sort((a, b) => a.ordem - b.ordem);
+  }
+
+  const orderedPhases = [...phases].sort((a, b) => a.ordem - b.ordem);
+
+  const flat: Module[] = [];
+  for (const phase of orderedPhases) {
+    flat.push(...(modulesByPhaseId.get(phase.id) ?? []));
+  }
+  return flat;
+}
+
 export function computeTrilhaView(phases: Phase[], modules: Module[], userModules: UserModule[]): TrilhaView {
   const userModuleByModuleId = new Map(userModules.map((um) => [um.module_id, um]));
 
