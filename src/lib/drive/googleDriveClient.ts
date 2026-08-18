@@ -52,8 +52,39 @@ export function getGoogleDriveLister(): DriveLister {
   const auth = getAuth();
   const drive = google.drive({ version: "v3", auth });
 
+  // A pasta raiz "Trilha de Liderança" vive dentro de um Shared Drive.
+  // Sem os parâmetros abaixo, a Drive API simplesmente não retorna nada
+  // de dentro de Shared Drives (foi a causa do preview vir sempre vazio:
+  // {"ok":true,"phases":[],"warnings":[]}).
+  //
+  // driveId é resolvido uma vez, a partir da primeira pasta consultada
+  // (que na prática é sempre a pasta raiz — mapTrilhaFromDrive chama
+  // listChildren(rootFolderId) antes de qualquer outra) e reaproveitado
+  // nas chamadas seguintes, já que todo o conteúdo está no mesmo drive.
+  let sharedDriveId: string | null | undefined; // undefined = ainda não resolvido
+
+  async function resolveSharedDriveId(someFolderId: string): Promise<string | null> {
+    if (sharedDriveId !== undefined) return sharedDriveId;
+    try {
+      const res = await drive.files.get({
+        fileId: someFolderId,
+        fields: "driveId",
+        supportsAllDrives: true,
+      });
+      sharedDriveId = res.data.driveId ?? null;
+    } catch {
+      // Se essa checagem falhar por qualquer motivo, segue sem driveId —
+      // supportsAllDrives/includeItemsFromAllDrives sozinhos já resolvem
+      // a maioria dos casos; corpora+driveId é só reforço de precisão.
+      sharedDriveId = null;
+    }
+    return sharedDriveId;
+  }
+
   return {
     async listChildren(folderId: string): Promise<DriveItem[]> {
+      const driveId = await resolveSharedDriveId(folderId);
+
       const items: DriveItem[] = [];
       let pageToken: string | undefined;
 
@@ -63,6 +94,9 @@ export function getGoogleDriveLister(): DriveLister {
           fields: "nextPageToken, files(id, name, mimeType)",
           pageSize: 200,
           pageToken,
+          supportsAllDrives: true,
+          includeItemsFromAllDrives: true,
+          ...(driveId ? { corpora: "drive", driveId } : {}),
         });
 
         for (const f of res.data.files ?? []) {
@@ -87,6 +121,9 @@ export function getGoogleDriveLister(): DriveLister {
 export async function fetchDriveFileAsText(fileId: string): Promise<string> {
   const auth = getAuth();
   const drive = google.drive({ version: "v3", auth });
-  const res = await drive.files.get({ fileId, alt: "media" }, { responseType: "text" });
+  const res = await drive.files.get(
+    { fileId, alt: "media", supportsAllDrives: true },
+    { responseType: "text" }
+  );
   return res.data as unknown as string;
 }
