@@ -8,27 +8,36 @@ import type { DriveItem, DriveLister } from "./types";
  * cliente. Este arquivo é o único ponto que fala com a API do Google —
  * toda a lógica de "o que fazer com a árvore de pastas" fica em
  * trilhaMapper.ts, que não sabe nada sobre googleapis.
+ *
+ * NOTA (V1 — provisório): autenticação via OAuth 2.0 + refresh token de
+ * uma conta corporativa, em vez de Service Account. O Workspace da
+ * Shopper tem "domain-restricted sharing" ativo, que impede compartilhar
+ * pastas com contas de serviço (`...iam.gserviceaccount.com`), por elas
+ * não pertencerem a um domínio permitido — a pasta nunca chega a ser
+ * compartilhada com a Service Account, então ela nunca teria acesso.
+ * OAuth com refresh token contorna isso autenticando como uma pessoa que
+ * já tem acesso à pasta, sem compartilhar nada com uma identidade nova.
+ *
+ * Ver README ("Configurar o acesso ao Google Drive") para o motivo
+ * completo e para Domain-Wide Delegation como alternativa de produção.
  */
 
 function getAuth() {
-  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const rawKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+  const refreshToken = process.env.GOOGLE_OAUTH_REFRESH_TOKEN;
 
-  if (!email || !rawKey) {
+  if (!clientId || !clientSecret || !refreshToken) {
     throw new Error(
-      "GOOGLE_SERVICE_ACCOUNT_EMAIL / GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY ausentes. Configure .env.local."
+      "GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET / GOOGLE_OAUTH_REFRESH_TOKEN ausentes. Configure .env.local."
     );
   }
 
-  // No painel da Vercel/no .env, quebras de linha da chave privada costumam
-  // vir escapadas como "\n" literal — aqui viram quebra de linha de verdade.
-  const privateKey = rawKey.replace(/\\n/g, "\n");
-
-  return new google.auth.JWT({
-    email,
-    key: privateKey,
-    scopes: ["https://www.googleapis.com/auth/drive.readonly"],
-  });
+  const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
+  oauth2Client.setCredentials({ refresh_token: refreshToken });
+  // A lib troca o refresh_token por um access_token novo automaticamente
+  // (e o renova sozinha quando expira) em cada chamada à API abaixo.
+  return oauth2Client;
 }
 
 export function getDriveRootFolderId(): string {

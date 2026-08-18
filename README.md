@@ -40,16 +40,46 @@ Plataforma online de capacitação de supervisores. Ver `PROJECT_CONTEXT.md` par
 
 ### Configurar o acesso ao Google Drive
 
-1. No [Google Cloud Console](https://console.cloud.google.com), crie (ou reaproveite) um projeto.
-2. Ative a **Google Drive API** (menu "APIs e serviços" → "Ativar APIs e serviços").
-3. Crie uma **conta de serviço** ("IAM e administrador" → "Contas de serviço" → "Criar conta de serviço"). Não precisa de nenhuma permissão especial no projeto GCP.
-4. Nessa conta de serviço, crie uma **chave** tipo JSON e baixe o arquivo.
-5. No arquivo JSON baixado, copie:
-   - `client_email` → vira `GOOGLE_SERVICE_ACCOUNT_EMAIL`
-   - `private_key` → vira `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` (mantenha os `\n` como estão)
-6. No Google Drive, **compartilhe a pasta raiz "Trilha de Liderança"** com o e-mail da conta de serviço (o mesmo `client_email`), com permissão de **Leitor**. Sem esse compartilhamento, a API devolve "arquivo não encontrado" mesmo com credenciais corretas.
-7. Pegue o ID da pasta raiz pela URL do Drive (`.../folders/`**`ESSE_ID_AQUI`**) → vira `GOOGLE_DRIVE_ROOT_FOLDER_ID`.
-8. Adicione as 3 variáveis no `.env.local` (e depois na Vercel).
+> ⚠️ **Solução provisória para a V1.** A abordagem original (Service
+> Account) não funciona no Workspace da Shopper: a política de
+> "domain-restricted sharing" do admin do Workspace impede compartilhar
+> qualquer pasta com uma conta `...iam.gserviceaccount.com`, por ela não
+> pertencer a um domínio permitido — a pasta nunca chega a ser
+> compartilhada com a Service Account, então a API sempre veria "arquivo
+> não encontrado", mesmo com credenciais corretas.
+>
+> Por isso a V1 autentica via **OAuth 2.0 com refresh token de uma conta
+> corporativa que já tem acesso à pasta** — não é preciso compartilhar
+> nada com uma identidade nova. O trade-off: o acesso fica amarrado a
+> essa pessoa (se a conta for desativada, tiver a senha trocada com
+> revogação de sessões, ou o consentimento for revogado, o refresh token
+> para de funcionar e precisa ser gerado de novo).
+>
+> **Melhoria de produção a considerar depois (fora do escopo da V1):**
+> pedir para um super-admin do Workspace configurar **Domain-Wide
+> Delegation** na Service Account (Admin Console → Segurança → Controles
+> de API → Delegação em todo o domínio). Isso permite a Service Account
+> "personificar" um usuário do domínio sem depender de uma pessoa
+> específica logada — mais robusto, mas exige acesso de super-admin que
+> pode não estar disponível rapidamente.
+
+**Passo a passo para gerar as credenciais OAuth:**
+
+1. No [Google Cloud Console](https://console.cloud.google.com), no mesmo projeto onde a Drive API já está ativa, vá em **APIs e serviços → Credenciais**.
+2. **Criar credenciais → ID do cliente OAuth**.
+   - Tipo de aplicativo: **Aplicativo da Web**.
+   - Em "URIs de redirecionamento autorizados", adicione: `https://developers.google.com/oauthplayground` (é só para gerar o refresh token uma vez — não é usado em produção).
+3. Copie o **Client ID** e o **Client Secret** gerados → viram `GOOGLE_OAUTH_CLIENT_ID` e `GOOGLE_OAUTH_CLIENT_SECRET`.
+4. Se a tela de consentimento OAuth do projeto estiver em modo "Teste", adicione como usuário de teste o e-mail da conta corporativa que você vai usar no passo 6 (Tela de consentimento OAuth → Usuários de teste).
+5. Abra o [Google OAuth Playground](https://developers.google.com/oauthplayground).
+6. No ícone de engrenagem (canto superior direito): marque **"Use your own OAuth credentials"** e cole o Client ID e Client Secret do passo 3.
+7. Na coluna da esquerda ("Step 1"), no campo de escopo, cole `https://www.googleapis.com/auth/drive.readonly` e clique **Authorize APIs**.
+8. Faça login com a **conta corporativa que já tem acesso à pasta "Trilha de Liderança"** (o seu usuário Shopper, por exemplo) e aceite o consentimento.
+9. De volta ao Playground, clique **Exchange authorization code for tokens** ("Step 2"). Copie o **Refresh token** exibido → vira `GOOGLE_OAUTH_REFRESH_TOKEN`.
+10. Pegue o ID da pasta raiz "Trilha de Liderança" pela URL do Drive (`.../folders/`**`ESSE_ID_AQUI`**) → vira `GOOGLE_DRIVE_ROOT_FOLDER_ID`.
+11. Adicione as 4 variáveis no `.env.local` (e depois na Vercel, em Project Settings → Environment Variables).
+
+Nenhum compartilhamento novo de pasta é necessário — a conta usada no passo 8 já enxerga a pasta normalmente.
 
 ## Setup local
 
@@ -92,6 +122,7 @@ Plataforma online de capacitação de supervisores. Ver `PROJECT_CONTEXT.md` par
 
 - `next@14.2.35` ainda tem uma vulnerabilidade conhecida (GHSA-955p-x3mx-jcvp, exposição de endpoints internos de Server Functions) cuja correção definitiva exige Next 16 (major, breaking). Não fizemos esse salto para não introduzir mudança de arquitetura fora de escopo. Rodar `npm audit` para acompanhar.
 - Sessão assinada (iron-session) não é revalidada contra o banco a cada requisição no middleware (Edge) — se um admin inativar um usuário no meio de uma sessão válida, o middleware ainda deixa passar até o cookie expirar (7 dias). As páginas Server Component (`/app`, `/admin`) e o CRUD de usuários (Fase 3) devem reforçar essa checagem quando fizer sentido; por ora é um trade-off aceito de performance vs. revogação instantânea.
+- **Autenticação com o Google Drive via OAuth 2.0 + refresh token de uma conta corporativa (Fase 4), em vez de Service Account** — contorna o "domain-restricted sharing" do Workspace da Shopper, mas amarra o acesso da aplicação a uma pessoa específica. Se essa conta for desativada, tiver a senha trocada com revogação de sessões, ou o consentimento OAuth revogado, o refresh token para de funcionar e precisa ser gerado de novo (ver "Configurar o acesso ao Google Drive" acima). Melhoria de produção a considerar: Domain-Wide Delegation, que exige um super-admin do Workspace autorizar a Service Account a personificar um usuário do domínio.
 
 ## Estrutura
 
