@@ -30,17 +30,8 @@ export default async function AdminHomePage() {
       </p>
       <p style={{ fontSize: 14 }}>
         <Link href="/admin/drive" style={{ color: "#4ECDC4" }}>
-          Ver estrutura do Drive →
+          Drive e sincronização →
         </Link>
-      </p>
-      <p style={{ fontSize: 14 }}>
-        <Link href="/admin/sync" style={{ color: "#4ECDC4" }}>
-          Sincronizar com o Drive →
-        </Link>
-      </p>
-      <p style={{ color: "#9aa0a6", fontSize: 14 }}>
-        Minha Trilha (visão do aluno) ainda não foi implementada — isso é
-        a Fase 6 do <code>EXECUTION_PLAN.md</code>.
       </p>
     </main>
   );

@@ -87,7 +87,7 @@ Nenhum compartilhamento novo de pasta é necessário — a conta usada no passo 
 - `src/lib/sync/driveSyncService.ts` — orquestra a parte de I/O: lê o Drive, valida `perguntas.json` de cada módulo, lê o banco, chama `diffTrilha`, e (só na confirmação) aplica os upserts/soft-deletes na ordem certa (tracks e phases antes de modules, por causa das FKs).
 - `GET /api/admin/sync/preview` — só leitura, **nenhuma gravação no banco**, nem mesmo um registro de auditoria (§8, "cancelar sem alterar banco" é literal). Mostra também a data da última sincronização.
 - `POST /api/admin/sync/confirm` — recalcula o diff do zero (nunca confia num plano vindo do cliente, evita aplicar uma prévia desatualizada), aplica, e grava `sync_history` + uma linha em `sync_changes` por mudança.
-- `/admin/sync` — tela com botão "Analisar" (prévia), lista de mudanças coloridas por tipo, avisos, e os botões "Confirmar e aplicar" / "Cancelar".
+- `/admin/drive` — tela única (Drive + sincronização, unificada posteriormente): botão "Analisar alterações" busca em paralelo a estrutura lida do Drive e o diff contra o banco; mostra as duas, mais os avisos, e só então libera "Confirmar e sincronizar" / "Cancelar".
 
 **Fase 6 — Minha Trilha**
 - `src/lib/services/trilhaView.ts` — lógica pura que monta a visão da trilha (accordion por fase, percentuais, módulo "atual") a partir de fases + módulos ativos + `user_modules` do aluno. A persistência de `unlocked_at`/progressão em si é da Fase 7 — aqui só computamos, em memória, o que mostrar. Já implementa a regra de não travar de novo um módulo com `unlocked_at` já persistido, mesmo que um módulo novo seja inserido antes dele (§7.1/§7.3) — testado com um fixture reproduzindo exatamente esse cenário, mais transição entre fases e progresso geral. **18/18 asserções passando.**
@@ -172,7 +172,7 @@ Trilha de Liderança/                    <- pasta raiz (GOOGLE_DRIVE_ROOT_FOLDER
 ### Como aplicar uma mudança
 
 1. Editar as pastas/arquivos no Drive como preferir (adicionar módulo, renomear fase, trocar o PDF, etc).
-2. No painel do Shopper Trilha, entrar em **Sincronizar com o Drive** (`/admin/sync`).
+2. No painel do Shopper Trilha, entrar em **Drive e sincronização** (`/admin/drive`).
 3. Clicar em **Analisar** — isso só lê o Drive e mostra uma prévia, nada é gravado ainda.
 4. Conferir a lista de mudanças e os avisos. Se algo parecer errado, **Cancelar** e ajustar no Drive antes de tentar de novo — cancelar não altera nada no banco.
 5. Se estiver tudo certo, clicar em **Confirmar e aplicar**.
@@ -232,7 +232,7 @@ Se o projeto crescer, formalizar isso com Vitest (rodando as mesmas fixtures já
 - Testado localmente: `/app` e `/admin` sem sessão retornam 307 para `/login`; login com corpo inválido retorna 400; logout sem sessão não quebra (200); banco inacessível no login retorna 503 com mensagem genérica, sem vazar stack trace ao cliente.
 - `/admin/usuarios/**` e `/api/admin/**` sem sessão retornam 307 (páginas) ou 401 JSON (API); com sessão válida de admin (testado com cookie iron-session gerado manualmente), a requisição passa do guard e chega até a camada de banco.
 - `/api/admin/drive/preview` sem sessão retorna 401; sem credenciais do Google configuradas retorna 500 com mensagem clara (não crasha, não vaza stack trace).
-- `/admin/sync` e `/api/admin/sync/**` sem sessão retornam 307/401. `applySyncPlan` não é atômico entre tabelas (ver débito técnico abaixo).
+- `/admin/drive` e `/api/admin/sync/**` sem sessão retornam 307/401. `applySyncPlan` não é atômico entre tabelas (ver débito técnico abaixo).
 - `/app` sem sessão retorna 307 para `/login`.
 
 ## Débito técnico conhecido (para uma V2)
@@ -267,11 +267,8 @@ src/
         [id]/page.tsx             # detalhe/editar usuário
         [id]/UserDetail.tsx
       drive/
-        page.tsx                 # preview da estrutura do Drive
-        DrivePreviewPanel.tsx
-      sync/
-        page.tsx                 # sincronização com prévia/confirmação
-        SyncPanel.tsx
+        page.tsx                 # Drive + sincronização, tela única
+        DriveSyncPanel.tsx        # analisar (estrutura + diff) / confirmar / cancelar
     api/
       health/route.ts            # diagnóstico de conexão com o banco
       auth/{login,logout,me}/route.ts
