@@ -105,7 +105,7 @@ Nenhum compartilhamento novo de pasta é necessário — a conta usada no passo 
 **Fase 8 — Página do módulo e PDF privado**
 - `src/lib/services/moduleAccessService.ts` — centraliza "esse módulo existe, é aplicável a este usuário, e está liberado" reaproveitando a mesma lógica de desbloqueio da Fase 6/7 (nunca há um módulo que apareça liberado em "Minha Trilha" e bloqueado aqui, ou vice-versa).
 - `GET /api/modulos/[id]/pdf` — só serve o PDF depois de validar sessão + autorização; resposta idêntica (404 "Módulo não disponível") tanto para módulo inexistente quanto para módulo bloqueado, para não revelar qual dos dois casos é. Primeiro acesso grava `material_accessed`/`material_accessed_at`; se o módulo não tem perguntas, o primeiro acesso já conclui o módulo e libera o próximo (reaproveitando `markCompletedWithoutQuiz` + `unlockNextModule` da Fase 7). Suporta `?download=1` para forçar `Content-Disposition: attachment` em vez de `inline`.
-- `/app/modulo/[id]` — página própria: volta para Minha Trilha, fase/módulo, visualizador (`<iframe>` apontando para a rota acima — o aluno nunca vê a URL do Drive), botão Baixar PDF, e a área de quiz (Fase 9) quando aplicável.
+- `/app/modulo/[id]` — página própria: volta para Minha Trilha, fase/módulo, visualizador próprio página-por-página (ver seção "Visualizador de PDF próprio" abaixo — o aluno nunca vê a URL do Drive), botão Baixar PDF, e a área de quiz (Fase 9) quando aplicável.
 - Módulo bloqueado acessado direto pela URL da página redireciona para `/app`; acessado direto pela URL da API de PDF/quiz recebe 404 — nunca serve o conteúdo.
 
 **Fase 9 — Quiz**
@@ -235,6 +235,24 @@ Se o projeto crescer, formalizar isso com Vitest (rodando as mesmas fixtures já
 - `/admin/drive` e `/api/admin/sync/**` sem sessão retornam 307/401. `applySyncPlan` não é atômico entre tabelas (ver débito técnico abaixo).
 - `/app` sem sessão retorna 307 para `/login`.
 
+## Visualizador de PDF próprio
+
+O `<iframe>` original foi substituído por um visualizador construído com `pdfjs-dist` (`src/app/app/modulo/[id]/PdfPageViewer.tsx`), porque o visualizador nativo do navegador mostrava toolbar, miniaturas laterais e scroll interno — ruim em telas menores.
+
+- Mostra 1 página por vez, centralizada e ajustada à largura do container (recalcula ao redimensionar a janela).
+- "Página X de Y" abaixo da página, botões grandes "← Anterior" / "Próxima →", desabilitados nas pontas.
+- Setas do teclado (← →) navegam também.
+- A busca do PDF continua sendo um `fetch()` para a mesma rota privada de sempre (`/api/modulos/[id]/pdf`) — é essa própria chamada que dispara `material_accessed`/conclusão no servidor, exatamente como o `<iframe>` fazia. Nenhuma URL/ID do Drive é exposta ao cliente em nenhum momento.
+- Botão "Baixar PDF" continua um link direto para a mesma rota com `?download=1`.
+
+### Pegadinha real encontrada e corrigida: o worker do pdf.js e o Terser
+
+`pdfjs-dist` precisa rodar seu parser de PDF num Web Worker separado (arquivo `pdf.worker.min.mjs`). A forma "moderna" de referenciar esse arquivo (`new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url)`) faz o **webpack adotar esse arquivo como um módulo do bundle** — e o Next tenta minificá-lo com Terser durante o build de produção. Como o worker é ESM (usa `import`/`export`), o Terser quebra com `'import', and 'export' cannot be used outside of module code`, e o build falha.
+
+**Solução:** o worker é copiado para `public/pdf.worker.min.mjs` (fora do pipeline do webpack — arquivos em `public/` são servidos como estão, sem nenhum processamento) via `scripts/copy-pdf-worker.mjs`, que roda automaticamente no `postinstall` de cada `npm install` — então, mesmo que a versão do `pdfjs-dist` seja atualizada depois, o worker certo é recopiado sem intervenção manual. O código referencia esse caminho como uma string fixa (`"/pdf.worker.min.mjs"`), não mais via `new URL(...)`.
+
+Também foi necessário fixar `pdfjs-dist` na versão `4.10.38` — a versão mais recente na época (`6.x`) usa sintaxe JS recente demais para o parser (SWC) do Next 14.2 conseguir processar em outro ponto do build.
+
 ## Débito técnico conhecido (para uma V2)
 
 - `next@14.2.35` ainda tem uma vulnerabilidade conhecida (GHSA-955p-x3mx-jcvp, exposição de endpoints internos de Server Functions) cuja correção definitiva exige Next 16 (major, breaking). Não fizemos esse salto para não introduzir mudança de arquitetura fora de escopo. Rodar `npm audit` para acompanhar.
@@ -243,6 +261,7 @@ Se o projeto crescer, formalizar isso com Vitest (rodando as mesmas fixtures já
 - **`perguntas.json` é buscado no Drive a cada `GET`/`POST` do quiz** (uma vez para mostrar as perguntas, outra para corrigir) — sem cache. Como a Fase 5 já valida o arquivo na sincronização, isso é redundante na maior parte do tempo; para poucos usuários simultâneos não é um problema, mas é um ponto de latência/cota da API do Drive a observar se o uso crescer.
 - **Rate limiting do login é em memória, por instância** — em ambiente serverless (Vercel), cada instância fria da função tem sua própria contagem; não é um limite globalmente garantido entre múltiplas instâncias simultâneas, só uma primeira barreira contra tentativas repetidas na mesma instância. Uma garantia real exigiria armazenamento compartilhado (ex: Redis/Upstash) — deixado de fora da V1 por não haver essa infraestrutura disponível ainda.
 - **Sem framework de testes formal no repositório** — a lógica crítica de cada fase foi validada com scripts ad-hoc durante o desenvolvimento (ver "Testes executados" acima), não com Jest/Vitest versionado. Migrar essas fixtures para testes de verdade é a recomendação mais simples de "dívida de qualidade" a pagar numa V2.
+- **`pdfjs-dist` fixado na versão `4.10.38`** (não a mais recente) — versões `6.x` usam sintaxe JS que o compilador do Next 14.2 não processa em certos arquivos internos da lib. Ao atualizar o Next para uma versão major nova no futuro, vale testar se `pdfjs-dist` mais recente passa a funcionar também.
 - **Autenticação com o Google Drive via OAuth 2.0 + refresh token de uma conta corporativa (Fase 4), em vez de Service Account** — contorna o "domain-restricted sharing" do Workspace da Shopper, mas amarra o acesso da aplicação a uma pessoa específica. Se essa conta for desativada, tiver a senha trocada com revogação de sessões, ou o consentimento OAuth revogado, o refresh token para de funcionar e precisa ser gerado de novo (ver "Configurar o acesso ao Google Drive" acima). Melhoria de produção a considerar: Domain-Wide Delegation, que exige um super-admin do Workspace autorizar a Service Account a personificar um usuário do domínio.
 - **`applySyncPlan` (Fase 5) não é atômico** — o `supabase-js` fala com o Postgres via REST, sem suporte nativo a transações multi-tabela. Cada upsert/soft-delete é aplicado individualmente; se um item falhar no meio (ex: violação do índice único de ordem de fase), os itens já aplicados antes dele permanecem gravados, e a falha é reportada em `failures` no resultado + no `summary` do `sync_history`, mas a sincronização pode ficar parcialmente aplicada. Para uma V2, considerar mover a aplicação para uma função Postgres (`plpgsql`) chamada via RPC, que aí sim roda dentro de uma transação real.
 
@@ -256,7 +275,8 @@ src/
     app/page.tsx                 # Minha Trilha (dados reais, Fase 6)
     app/TrilhaAccordion.tsx        # accordion mobile-first (Client Component)
     app/modulo/[id]/page.tsx        # página própria do módulo (Fase 8)
-    app/modulo/[id]/ModuloClient.tsx # visualizador PDF + quiz (Client Component)
+    app/modulo/[id]/ModuloClient.tsx # PDF + quiz, delega o visualizador ao componente abaixo
+    app/modulo/[id]/PdfPageViewer.tsx # visualizador próprio de PDF (pdfjs-dist), página por página
     admin/
       page.tsx                   # painel do gestor (links)
       usuarios/
@@ -316,6 +336,7 @@ src/
   middleware.ts                    # guards de rota (/app, /admin, /api/admin), roda no Edge
 scripts/
   seed-admin.mjs                  # bootstrap do primeiro admin
+  copy-pdf-worker.mjs               # copia o worker do pdf.js para public/ (roda no postinstall)
 supabase/
   migrations/
     0001_init.sql

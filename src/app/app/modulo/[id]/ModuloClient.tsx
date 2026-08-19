@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { PdfPageViewer } from "./PdfPageViewer";
 
 interface PublicAlternativa {
   id: string;
@@ -113,13 +114,8 @@ export function ModuloClient({
 
   return (
     <div>
-      <div style={{ border: "1px solid #22252b", borderRadius: 10, overflow: "hidden", marginBottom: 10 }}>
-        <iframe
-          src={`/api/modulos/${moduleId}/pdf`}
-          onLoad={handlePdfLoad}
-          style={{ width: "100%", height: 480, border: "none", background: "#fff" }}
-          title="Material do módulo"
-        />
+      <div style={{ marginBottom: 10 }}>
+        <PdfPageViewer moduleId={moduleId} onLoaded={handlePdfLoad} />
       </div>
       <a
         href={`/api/modulos/${moduleId}/pdf?download=1`}
