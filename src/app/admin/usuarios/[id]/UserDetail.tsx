@@ -25,6 +25,7 @@ interface ModuleDetail {
   phase_id: string;
   phase_nome: string;
   phase_ordem: number;
+  has_questions: boolean;
   unlocked_at: string | null;
   material_accessed: boolean;
   material_accessed_at: string | null;
@@ -88,6 +89,79 @@ const sectionStyle: React.CSSProperties = {
   padding: 16,
   marginBottom: 16,
 };
+
+function ModuleRow({ m, attempts }: { m: ModuleDetail; attempts: AttemptDetail[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasQuizHistory = m.has_questions || attempts.length > 0;
+
+  return (
+    <div style={{ fontSize: 13, borderTop: "1px solid #22252b", paddingTop: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+        <b>
+          {m.ordem}. {m.nome}
+        </b>
+        {hasQuizHistory && (
+          <button
+            onClick={() => setExpanded((e) => !e)}
+            style={{
+              padding: "3px 10px",
+              borderRadius: 999,
+              border: "1px solid #2a2d34",
+              background: "transparent",
+              color: "#7F77DD",
+              fontSize: 12,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {expanded ? "Ocultar tentativas" : `Ver tentativas da prova (${attempts.length})`}
+          </button>
+        )}
+      </div>
+      <div style={{ color: "#9aa0a6" }}>
+        Material acessado: {m.material_accessed ? formatDate(m.material_accessed_at) : "não"} · Concluído:{" "}
+        {m.completed ? formatDate(m.completed_at) : "não"} · Melhor nota: {m.best_score ?? "—"}
+      </div>
+
+      {expanded && (
+        <div style={{ marginTop: 10, marginBottom: 4 }}>
+          {attempts.length === 0 ? (
+            <p style={{ fontSize: 12.5, color: "#9aa0a6", margin: 0 }}>
+              Nenhuma tentativa registrada ainda para este módulo.
+            </p>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: "#9aa0a6" }}>
+                    <th style={{ padding: "4px 8px" }}>Data</th>
+                    <th style={{ padding: "4px 8px" }}>Acertos</th>
+                    <th style={{ padding: "4px 8px" }}>Nota</th>
+                    <th style={{ padding: "4px 8px" }}>Resultado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {attempts.map((a) => (
+                    <tr key={a.id} style={{ borderTop: "1px solid #22252b" }}>
+                      <td style={{ padding: "4px 8px" }}>{formatDate(a.submitted_at ?? a.started_at)}</td>
+                      <td style={{ padding: "4px 8px" }}>
+                        {a.correct_answers}/{a.total_questions}
+                      </td>
+                      <td style={{ padding: "4px 8px" }}>{a.score}</td>
+                      <td style={{ padding: "4px 8px", color: a.passed ? "#4ECDC4" : "#ff8a8a" }}>
+                        {a.passed ? "Aprovado" : "Reprovado"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function UserDetail({
   user,
@@ -321,7 +395,9 @@ export function UserDetail({
         </form>
       </section>
 
-      {/* Histórico de módulos, agrupado por fase */}
+      {/* Histórico de módulos, agrupado por fase — tentativas de prova
+          vinculadas a cada módulo, expansíveis inline (substitui a antiga
+          tabela global de "Tentativas de prova" no fim da página). */}
       <section style={sectionStyle}>
         <h2 style={{ fontSize: 15, marginTop: 0, marginBottom: 12 }}>Módulos</h2>
         {modules.length === 0 ? (
@@ -345,53 +421,15 @@ export function UserDetail({
                 </p>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {group.modules.map((m) => (
-                    <div key={m.module_id} style={{ fontSize: 13, borderTop: "1px solid #22252b", paddingTop: 8 }}>
-                      <b>
-                        {m.ordem}. {m.nome}
-                      </b>
-                      <div style={{ color: "#9aa0a6" }}>
-                        Material acessado: {m.material_accessed ? formatDate(m.material_accessed_at) : "não"} ·
-                        Concluído: {m.completed ? formatDate(m.completed_at) : "não"} · Melhor nota:{" "}
-                        {m.best_score ?? "—"}
-                      </div>
-                    </div>
+                    <ModuleRow
+                      key={m.module_id}
+                      m={m}
+                      attempts={attempts.filter((a) => a.module_id === m.module_id)}
+                    />
                   ))}
                 </div>
               </div>
             ))}
-          </div>
-        )}
-      </section>
-
-      {/* Histórico de tentativas de prova */}
-      <section style={sectionStyle}>
-        <h2 style={{ fontSize: 15, marginTop: 0, marginBottom: 12 }}>Tentativas de prova</h2>
-        {attempts.length === 0 ? (
-          <p style={{ fontSize: 13, color: "#9aa0a6", margin: 0 }}>Nenhuma tentativa registrada ainda.</p>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead>
-                <tr style={{ textAlign: "left", color: "#9aa0a6" }}>
-                  <th style={{ padding: "4px 8px" }}>Data</th>
-                  <th style={{ padding: "4px 8px" }}>Acertos</th>
-                  <th style={{ padding: "4px 8px" }}>Nota</th>
-                  <th style={{ padding: "4px 8px" }}>Resultado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {attempts.map((a) => (
-                  <tr key={a.id} style={{ borderTop: "1px solid #22252b" }}>
-                    <td style={{ padding: "4px 8px" }}>{formatDate(a.submitted_at ?? a.started_at)}</td>
-                    <td style={{ padding: "4px 8px" }}>
-                      {a.correct_answers}/{a.total_questions}
-                    </td>
-                    <td style={{ padding: "4px 8px" }}>{a.score}</td>
-                    <td style={{ padding: "4px 8px" }}>{a.passed ? "Aprovado" : "Reprovado"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         )}
       </section>

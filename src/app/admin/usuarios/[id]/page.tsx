@@ -44,6 +44,7 @@ export default async function UsuarioDetalhePage({ params }: { params: { id: str
       phase_id: m.phase_id,
       phase_nome: phase?.nome ?? "—",
       phase_ordem: phase?.ordem ?? 0,
+      has_questions: m.has_questions,
       unlocked_at: um?.unlocked_at ?? null,
       material_accessed: um?.material_accessed ?? false,
       material_accessed_at: um?.material_accessed_at ?? null,
