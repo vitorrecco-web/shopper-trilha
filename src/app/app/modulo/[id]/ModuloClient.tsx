@@ -146,6 +146,23 @@ function PdfMaterialSection({
   const [pageInfo, setPageInfo] = useState({ current: 1, total: 0 });
   const touchStartXRef = useRef<number | null>(null);
 
+  // BUG CORRIGIDO: esta função precisa ter identidade estável entre
+  // renders. Antes ela era criada inline (`(c,t) => setPageInfo(...)`)
+  // diretamente no JSX — uma função NOVA a cada render. Como o
+  // `useEffect` dentro de PdfPageViewer depende de `onPageChange`, ele
+  // disparava de novo a cada vez que a identidade mudava, chamando
+  // `setPageInfo` com um objeto novo, o que re-renderizava este
+  // componente, criando outra função nova — um loop infinito de
+  // re-render que travava a aba inteira (por isso os cliques no
+  // breadcrumb/botão de voltar paravam de responder só nesta página, e
+  // o PDF parecia nunca terminar de carregar). `useCallback` com deps
+  // vazias resolve a causa; a checagem de "mudou de verdade" dentro é
+  // uma segunda camada de proteção, para nunca mais depender só de
+  // identidade de função ficar estável.
+  const handlePageChange = useCallback((current: number, total: number) => {
+    setPageInfo((prev) => (prev.current === current && prev.total === total ? prev : { current, total }));
+  }, []);
+
   // §9: o próprio carregamento do visualizador (a requisição real ao
   // endpoint do PDF) é o "primeiro acesso" — o servidor já grava
   // material_accessed nesse momento. Aqui só refletimos na tela.
@@ -238,7 +255,7 @@ function PdfMaterialSection({
               ref={pdfRef}
               moduleId={moduleId}
               onLoaded={handlePdfLoad}
-              onPageChange={(current, total) => setPageInfo({ current, total })}
+              onPageChange={handlePageChange}
               hideControls={expanded}
               fitAvailableHeight={expanded}
             />
