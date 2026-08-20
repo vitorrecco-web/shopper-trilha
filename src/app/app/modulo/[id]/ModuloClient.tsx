@@ -240,6 +240,7 @@ function PdfMaterialSection({
               onLoaded={handlePdfLoad}
               onPageChange={(current, total) => setPageInfo({ current, total })}
               hideControls={expanded}
+              fitAvailableHeight={expanded}
             />
             {!expanded && <ExpandButton onClick={() => setExpanded(true)} />}
           </div>

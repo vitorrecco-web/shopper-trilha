@@ -382,7 +382,37 @@ supabase/
     0002_service_role_grants.sql
 ```
 
-## Correção do player de YouTube no Safari/iOS + Modo de Estudo
+## Patch corretivo pós-testes reais (regressões do Modo de Estudo)
+
+Depois de testes reais em desktop e iPhone, apareceram regressões e um bug ainda não resolvido. Este patch corrige tudo sem tocar banco, APIs, progressão, quiz, Drive ou autenticação.
+
+### 1-2. PDF minúsculo numa área branca grande (regressão)
+
+**Causa:** ao criar o Modo de Estudo, o `PdfPageViewer` passou a usar `height: "100%"` + `flex: "1 1 auto"` no wrapper e a restringir a escala também pela altura do container — **incondicionalmente**, mesmo fora do modo ampliado. No uso normal, a altura desse container é incidental (decorrente do conteúdo, não definida por ninguém de propósito), então usá-la para escalar produzia páginas minúsculas dentro de uma área branca grande — sobretudo em PDFs verticais/Word.
+
+**Correção:** novo prop `fitAvailableHeight` (padrão `false`). Fora do Modo de Estudo, o comportamento volta a ser exatamente o de antes (escala só pela largura, sem altura forçada). Só quando `fitAvailableHeight={true}` (usado exclusivamente dentro do `FocusOverlay`) é que a página passa a considerar largura **e** altura simultaneamente (`Math.min`), preservando a proporção e centralizando — isso é o que resolve a margem vazia excessiva no PDF vertical dentro do Modo de Estudo, sem prejudicar o modo normal.
+
+**Landscape (PDF horizontal/PowerPoint) sem fechar/reabrir:** o listener de reajuste agora escuta `resize` **e** `orientationchange`, com uma dupla `requestAnimationFrame` antes de remedir o container — no iOS, as dimensões durante o próprio evento de rotação às vezes ainda refletem a orientação antiga por um instante; esperar dois frames garante que o layout já assentou antes de recalcular o encaixe.
+
+### 3. Breadcrumb "Minha Trilha" sem navegar
+
+Auditei `Breadcrumb.tsx` e os três usos (`/admin/drive`, `/admin/usuarios`, módulo) — a lógica (`item.href && !isLast`) já estava correta por inspeção de código; não encontrei nenhum bloqueio de clique (sem `pointer-events`, `preventDefault` ou z-index conflitante na região). Mesmo assim, reforcei o componente para eliminar qualquer ambiguidade: o item não-último com `href` agora usa a cor de link da marca (`primaryDark`, não mais cinza neutro), ganha sublinhado no hover e uma área de toque maior — não deve mais parecer texto estático em nenhum caso. Se o problema persistir após este patch, é um sinal de que a causa é outra (ex: cache do navegador de uma versão anterior) e preciso investigar mais a fundo com um print do problema acontecendo.
+
+### 4. YouTube no Safari/iPhone — causa real encontrada
+
+A correção anterior (CSS + `playsinline`) não resolveu porque **não era (só) um problema de CSS**. A implementação antiga deixava a própria YouTube IFrame Player API **criar o `<iframe>` do zero** via `new YT.Player(div, { videoId, ... })`, sem passar o parâmetro `origin`. Esse fluxo depende de um handshake por `postMessage` entre a página e o iframe para o vídeo carregar. No Safari/iOS, com políticas de rastreamento entre sites (ITP) mais estritas que no Chrome/Android, esse handshake pode falhar silenciosamente — resultado: o **container** aparecia normalmente (por isso o 16:9 e o "Ampliar" pareciam certos), mas o **vídeo em si nunca carregava dentro do iframe**, ficando preto.
+
+**Correção (reestruturação interna do `YoutubePlayer.tsx`, API pública inalterada — `videoId`/`onProgress` continuam os mesmos):** paramos de depender da API para criar o elemento. Agora:
+- Um `<iframe>` real é montado diretamente no JSX, com URL de embed completa (`enablejsapi=1`, `origin=<origin da página>`, `playsinline=1`, `rel=0`, `modestbranding=1`) e atributo `allow` recomendado para mobile.
+- A YT IFrame Player API só é usada depois, **"adotando" esse iframe já existente** (modo documentado oficialmente pela própria API) — só para ler `getCurrentTime`/`getDuration` e alimentar o `onProgress`.
+- Isso significa que **o vídeo funciona mesmo se a camada de tracking falhar** — o pior cenário possível deixa de ser "tela preta" e passa a ser, na hipótese mais pessimista, "vídeo toca normalmente, mas sem reportar progresso" (não observado nos testes, mas essa é a garantia estrutural da nova abordagem).
+- Adicionado `onError` com diagnóstico visível só do código numérico do erro (nunca de dado sensível) — se o vídeo específico tiver embed bloqueado pelo dono (códigos 101/150), agora isso aparece na tela em vez de um retângulo preto sem explicação.
+
+### 5. Modo de Estudo — preservação de estado
+
+Sem mudança de comportamento aqui: `FocusOverlay` continua nunca desmontando `children`, então a troca do `YoutubePlayer` para uma abordagem baseada em `<iframe>` real preserva o tempo de reprodução ao ampliar/recolher pelo mesmo motivo de antes (é o mesmo nó do DOM, nunca recriado) — na prática, ficou até mais robusto, porque a continuidade de um `<iframe>` real não depende de nenhum estado JS interno da API para "lembrar" o tempo.
+
+## Correção do player de YouTube no Safari/iOS + Modo de Estudo (histórico — ver seção acima para a causa real)
 
 ### Causa do retângulo preto no iOS
 

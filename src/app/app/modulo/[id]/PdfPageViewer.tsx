@@ -39,8 +39,19 @@ export const PdfPageViewer = forwardRef<
     onPageChange?: (current: number, total: number) => void;
     /** Oculta o "Página X de Y" e os botões Anterior/Próxima internos — usado quando o Modo de Estudo já mostra sua própria navegação sobreposta, para não duplicar. */
     hideControls?: boolean;
+    /**
+     * Quando true, a página usa o máximo de LARGURA e ALTURA disponíveis
+     * simultaneamente (fit "contain"), porque o container tem uma altura
+     * própria e intencional — é o caso do Modo de Estudo.
+     * Quando false (padrão — uso normal, fora do Modo de Estudo), o
+     * ajuste é só pela largura, como sempre foi: a altura do container
+     * nesse modo é incidental (decorrente do conteúdo), não intencional,
+     * e usá-la para escalar produzia páginas minúsculas dentro de uma
+     * área branca grande — essa era a regressão a corrigir.
+     */
+    fitAvailableHeight?: boolean;
   }
->(function PdfPageViewer({ moduleId, onLoaded, onPageChange, hideControls }, ref) {
+>(function PdfPageViewer({ moduleId, onLoaded, onPageChange, hideControls, fitAvailableHeight = false }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
@@ -104,46 +115,54 @@ export const PdfPageViewer = forwardRef<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [moduleId]);
 
-  const renderPage = useCallback(async (pageNumber: number) => {
-    const pdf = pdfDocRef.current;
-    const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!pdf || !canvas || !container) return;
+  const renderPage = useCallback(
+    async (pageNumber: number) => {
+      const pdf = pdfDocRef.current;
+      const canvas = canvasRef.current;
+      const container = containerRef.current;
+      if (!pdf || !canvas || !container) return;
 
-    setRendering(true);
-    try {
-      const page = await pdf.getPage(pageNumber);
-      const containerWidth = container.clientWidth || 320;
-      const baseViewport = page.getViewport({ scale: 1 });
+      setRendering(true);
+      try {
+        const page = await pdf.getPage(pageNumber);
+        const containerWidth = container.clientWidth || 320;
+        const baseViewport = page.getViewport({ scale: 1 });
+        const scaleByWidth = containerWidth / baseViewport.width;
 
-      // No Modo de Estudo o container também tem altura definida (o
-      // overlay ocupa quase a tela toda) — usar a altura disponível
-      // como segundo limite garante "o máximo possível da tela" sem
-      // cortar a página por cima/baixo.
-      const containerHeight = container.clientHeight;
-      const scaleByWidth = containerWidth / baseViewport.width;
-      const scale =
-        containerHeight > 0
-          ? Math.min(scaleByWidth, containerHeight / baseViewport.height)
-          : scaleByWidth;
-      const viewport = page.getViewport({ scale });
+        // Só usa a altura do container como segundo limite no Modo de
+        // Estudo (fitAvailableHeight=true), onde essa altura é
+        // intencional (o overlay ocupa quase a tela toda). No modo
+        // normal, a altura do container é incidental — usá-la aqui era
+        // exatamente a causa da página aparecer minúscula numa área
+        // branca grande.
+        let scale = scaleByWidth;
+        if (fitAvailableHeight) {
+          const containerHeight = container.clientHeight;
+          if (containerHeight > 0) {
+            scale = Math.min(scaleByWidth, containerHeight / baseViewport.height);
+          }
+        }
 
-      const context = canvas.getContext("2d");
-      if (!context) return;
+        const viewport = page.getViewport({ scale });
 
-      // Ajusta para telas de alta densidade (retina) sem perder nitidez.
-      const outputScale = window.devicePixelRatio || 1;
-      canvas.width = Math.floor(viewport.width * outputScale);
-      canvas.height = Math.floor(viewport.height * outputScale);
-      canvas.style.width = `${Math.floor(viewport.width)}px`;
-      canvas.style.height = `${Math.floor(viewport.height)}px`;
+        const context = canvas.getContext("2d");
+        if (!context) return;
 
-      const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined;
-      await page.render({ canvasContext: context, viewport, transform }).promise;
-    } finally {
-      setRendering(false);
-    }
-  }, []);
+        // Ajusta para telas de alta densidade (retina) sem perder nitidez.
+        const outputScale = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(viewport.width * outputScale);
+        canvas.height = Math.floor(viewport.height * outputScale);
+        canvas.style.width = `${Math.floor(viewport.width)}px`;
+        canvas.style.height = `${Math.floor(viewport.height)}px`;
+
+        const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined;
+        await page.render({ canvasContext: context, viewport, transform }).promise;
+      } finally {
+        setRendering(false);
+      }
+    },
+    [fitAvailableHeight]
+  );
 
   useEffect(() => {
     if (!loading && numPages > 0) renderPage(currentPage);
@@ -153,13 +172,25 @@ export const PdfPageViewer = forwardRef<
     onPageChange?.(currentPage, numPages);
   }, [currentPage, numPages, onPageChange]);
 
-  // Reajusta a página à largura disponível quando a janela é redimensionada.
+  // Reajusta a página quando a janela é redimensionada OU o aparelho
+  // gira (orientationchange) — dupla requestAnimationFrame espera o
+  // layout assentar antes de medir o container de novo (no iOS, as
+  // dimensões durante o próprio evento de rotação ainda podem refletir
+  // a orientação antiga por um instante).
   useEffect(() => {
-    function handleResize() {
-      if (!loading && numPages > 0) renderPage(currentPage);
+    function scheduleRefit() {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!loading && numPages > 0) renderPage(currentPage);
+        });
+      });
     }
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    window.addEventListener("resize", scheduleRefit);
+    window.addEventListener("orientationchange", scheduleRefit);
+    return () => {
+      window.removeEventListener("resize", scheduleRefit);
+      window.removeEventListener("orientationchange", scheduleRefit);
+    };
   }, [currentPage, loading, numPages, renderPage]);
 
   const goPrev = useCallback(() => setCurrentPage((p) => Math.max(1, p - 1)), []);
@@ -197,7 +228,13 @@ export const PdfPageViewer = forwardRef<
   const isLast = numPages > 0 && currentPage >= numPages;
 
   return (
-    <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
+    <div
+      style={
+        fitAvailableHeight
+          ? { width: "100%", height: "100%", display: "flex", flexDirection: "column" }
+          : undefined
+      }
+    >
       <div
         ref={containerRef}
         style={{
@@ -208,9 +245,9 @@ export const PdfPageViewer = forwardRef<
           background: "#fff",
           display: "flex",
           justifyContent: "center",
-          alignItems: "center",
+          alignItems: fitAvailableHeight ? "center" : undefined,
           minHeight: loading ? 220 : undefined,
-          flex: "1 1 auto",
+          ...(fitAvailableHeight ? { flex: "1 1 auto", minHeight: 0 } : {}),
         }}
       >
         {loading ? (
