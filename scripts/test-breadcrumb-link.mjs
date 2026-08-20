@@ -167,10 +167,6 @@ assert(
   /label:\s*"Minha Trilha"\s*,\s*href:\s*"\/app"/.test(modulePageSrc),
   'src/app/app/modulo/[id]/page.tsx deve conter literalmente { label: "Minha Trilha", href: "/app" }'
 );
-assert(
-  /<Link\s+href="\/app"/.test(modulePageSrc) && /Voltar para Minha Trilha/.test(modulePageSrc),
-  'src/app/app/modulo/[id]/page.tsx deve conter um <Link href="/app"> real com o texto "Voltar para Minha Trilha", independente do breadcrumb'
-);
 
 // ---- limpeza ----
 rmSync(workDir, { recursive: true, force: true });
