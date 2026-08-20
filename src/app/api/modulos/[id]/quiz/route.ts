@@ -14,6 +14,10 @@ import { unlockNextModule } from "@/lib/services/progressionService";
  * POST (submeter respostas) — mesma regra da Fase 8: sessão válida,
  * módulo aplicável e liberado, e (tarefa 8 da Fase 8) só libera a área
  * de quiz depois que o material já foi acessado pelo menos uma vez.
+ *
+ * Para módulo de vídeo (material_type='youtube'), "acessado" não basta
+ * — também exige ter atingido o percentual mínimo assistido (mesma
+ * regra do PDF continua valendo para módulo de PDF, sem alteração).
  */
 async function authorize(
   moduleId: string
@@ -30,6 +34,14 @@ async function authorize(
     return {
       error: NextResponse.json(
         { ok: false, error: "Acesse o material antes de responder o quiz." },
+        { status: 403 }
+      ),
+    };
+  }
+  if (access.module.material_type === "youtube" && !access.videoThresholdReached) {
+    return {
+      error: NextResponse.json(
+        { ok: false, error: "Assista pelo menos o percentual mínimo do vídeo antes de responder o quiz." },
         { status: 403 }
       ),
     };

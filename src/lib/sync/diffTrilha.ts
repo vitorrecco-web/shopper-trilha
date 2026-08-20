@@ -42,8 +42,12 @@ export interface ModuleUpsert {
   track_drive_folder_id: string | null;
   ordem: number;
   nome: string;
+  material_type: "pdf" | "youtube";
   pdf_drive_id: string | null;
   pdf_nome: string | null;
+  video_drive_id: string | null;
+  video_external_id: string | null;
+  video_titulo: string | null;
   questions_drive_id: string | null;
   has_questions: boolean;
 }
@@ -195,6 +199,26 @@ function diffModule(discovered: ModuleUpsert, existing: Module | undefined, chan
       label: `Módulo "${discovered.nome}": PDF atualizado`,
     });
   }
+  if (existing.material_type !== discovered.material_type) {
+    changes.push({
+      entity_type: "module",
+      entity_drive_id: discovered.drive_folder_id,
+      change_type: "updated",
+      old_value: { material_type: existing.material_type },
+      new_value: { material_type: discovered.material_type },
+      label: `Módulo "${discovered.nome}": material principal mudou de ${existing.material_type === "youtube" ? "YouTube" : "PDF"} para ${discovered.material_type === "youtube" ? "YouTube" : "PDF"}`,
+    });
+  }
+  if (existing.video_external_id !== discovered.video_external_id) {
+    changes.push({
+      entity_type: "module",
+      entity_drive_id: discovered.drive_folder_id,
+      change_type: "updated",
+      old_value: { video_external_id: existing.video_external_id },
+      new_value: { video_external_id: discovered.video_external_id },
+      label: `Módulo "${discovered.nome}": vídeo do YouTube ${discovered.video_external_id ? "atualizado" : "removido"}`,
+    });
+  }
   if (existing.has_questions !== discovered.has_questions) {
     changes.push({
       entity_type: "module",
@@ -254,8 +278,12 @@ export function diffTrilha(mapped: MappedTrilha, db: DbSnapshot): SyncPlan {
       track_drive_folder_id: trackDriveId,
       ordem: mod.ordem,
       nome: mod.nome,
+      material_type: mod.material_type,
       pdf_drive_id: mod.pdf_drive_id,
       pdf_nome: mod.pdf_nome,
+      video_drive_id: mod.video_drive_id,
+      video_external_id: mod.video_external_id,
+      video_titulo: mod.video_titulo,
       questions_drive_id: mod.questions_drive_id,
       has_questions: mod.has_questions,
     };

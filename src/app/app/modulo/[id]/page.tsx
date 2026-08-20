@@ -34,8 +34,12 @@ export default async function ModuloPage({ params }: { params: { id: string } })
 
       <ModuloClient
         moduleId={access.module.id}
+        materialType={access.module.material_type}
         hasQuestions={access.module.has_questions}
+        videoExternalId={access.module.video_external_id}
+        videoTitulo={access.module.video_titulo}
         initialMaterialAccessed={access.materialAccessed}
+        initialVideoWatchedPercent={access.videoWatchedPercent}
         initialCompleted={access.completed}
         initialBestScore={access.bestScore}
         nextModuleId={access.nextModuleId}

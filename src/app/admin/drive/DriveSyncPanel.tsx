@@ -7,7 +7,9 @@ interface MappedModule {
   drive_folder_id: string;
   ordem: number;
   nome: string;
+  material_type: "pdf" | "youtube";
   pdf_nome: string | null;
+  video_drive_id: string | null;
   has_questions: boolean;
 }
 interface MappedTrack {
@@ -101,11 +103,17 @@ const boxStyle: React.CSSProperties = {
 };
 
 function ModuleRow({ m }: { m: MappedModule }) {
+  const hasMaterial = m.material_type === "youtube" ? Boolean(m.video_drive_id) : Boolean(m.pdf_nome);
   return (
     <div style={{ fontSize: 13, padding: "4px 0", display: "flex", gap: 8, alignItems: "baseline" }}>
       <span style={{ color: "#9aa0a6", minWidth: 20 }}>{m.ordem}.</span>
       <span>{m.nome}</span>
-      {!m.pdf_nome && <span style={{ color: "#ff8a8a", fontSize: 11 }}>sem PDF</span>}
+      {m.material_type === "youtube" ? (
+        <span style={{ color: "#4ECDC4", fontSize: 11 }}>YouTube</span>
+      ) : (
+        <span style={{ color: "#9aa0a6", fontSize: 11 }}>PDF</span>
+      )}
+      {!hasMaterial && <span style={{ color: "#ff8a8a", fontSize: 11 }}>sem material</span>}
       {m.has_questions && <span style={{ color: "#4ECDC4", fontSize: 11 }}>com perguntas</span>}
     </div>
   );

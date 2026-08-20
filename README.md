@@ -235,6 +235,40 @@ Se o projeto crescer, formalizar isso com Vitest (rodando as mesmas fixtures já
 - `/admin/drive` e `/api/admin/sync/**` sem sessão retornam 307/401. `applySyncPlan` não é atômico entre tabelas (ver débito técnico abaixo).
 - `/app` sem sessão retorna 307 para `/login`.
 
+## Suporte a módulos com vídeo (YouTube)
+
+Um módulo pode ter como material principal **exatamente 1 PDF OU exatamente 1 `video.json`** — nunca os dois. Formato do `video.json`:
+
+```json
+{ "tipo": "youtube", "url": "https://www.youtube.com/watch?v=VIDEO_ID", "titulo": "Opcional" }
+```
+
+- `src/lib/drive/validateVideoJson.ts` — valida o JSON e extrai o ID do YouTube de URLs `youtube.com/watch?v=`, `youtu.be/`, `.../embed/` e `.../shorts/` (com ou sem `www`/`m.`, ignorando parâmetros extras como `&t=`). Só `"tipo": "youtube"` é suportado por enquanto. Testado com 21 casos (URLs válidas/invalidas, JSON malformado, tipo não suportado, título ausente) — todos corretos.
+- **Detecção no Drive** (`trilhaMapper.ts`, só metadados) — identifica um arquivo `video.json` do mesmo jeito que já identificava `perguntas.json`. Se houver PDF e `video.json` juntos na mesma pasta de módulo, gera aviso de conflito e **prioriza o PDF** (não escolhe silenciosamente, mas também não quebra um módulo PDF já publicado por engano). Testado com 9 casos (só PDF, só vídeo, conflito, nem um nem outro).
+- **Validação de conteúdo** (`driveSyncService.ts`, só na sincronização) — busca e valida o `video.json` de verdade (mesmo padrão de `perguntas.json`: se inválido, aviso e o módulo fica sem material principal até ser corrigido, nunca quebra a sincronização). É nesse momento que o título do módulo (quando não há PDF) passa a vir do campo `titulo` do JSON.
+- **Prévia do Drive** (`/admin/drive`) mostra "YouTube" ou "PDF" ao lado de cada módulo.
+- **Progressão** — `unlockNextModule`/`markCompletedWithoutQuiz`/regras de quiz da Fase 7/8/9 **não foram alteradas**; só ganharam um novo ponto de entrada:
+  - Vídeo **sem quiz**: abrir a página **não conclui automaticamente** (diferente do PDF) — o aluno precisa assistir pelo menos **90%** do vídeo e clicar em "Concluir módulo" (`POST /api/modulos/[id]/complete-video`, que revalida o percentual no servidor antes de aplicar).
+  - Vídeo **com quiz**: a área de quiz só libera depois do percentual mínimo assistido (antes já eram só o material_accessed; para vídeo, some-se a exigência do percentual — PDF continua exigindo só o acesso, sem alteração).
+  - `POST /api/modulos/[id]/video-progress` recebe o percentual reportado pelo player (YouTube IFrame API, client-side) e persiste o **maior valor já visto** (nunca regride, mesma lógica de `best_score`).
+- **Por que 90%, não 80% ou 100%**: 80% arrisca considerar "assistido" quem pulou uma parte relevante perto do fim; 100% falha facilmente por não esperar créditos/tela final. 90% é o padrão comum em LMS corporativos.
+- Testado com um fluxo integrado (10 asserções): percentual abaixo do threshold bloqueia conclusão e quiz; acima libera os dois; percentual nunca regride quando o aluno volta o vídeo; módulo PDF continua exigindo só `material_accessed`, sem a exigência de percentual.
+
+### Schema (menor alteração compatível)
+
+```sql
+ALTER TABLE modules
+  ADD COLUMN material_type TEXT NOT NULL DEFAULT 'pdf' CHECK (material_type IN ('pdf', 'youtube')),
+  ADD COLUMN video_drive_id TEXT,
+  ADD COLUMN video_external_id TEXT,
+  ADD COLUMN video_titulo TEXT;
+
+ALTER TABLE user_modules
+  ADD COLUMN video_watched_percent NUMERIC(5,2);
+```
+
+Nenhuma coluna nova é `NOT NULL` sem default — todo módulo PDF existente recebe `material_type='pdf'` automaticamente, sem precisar de nenhuma migração de dados.
+
 ## Visualizador de PDF próprio
 
 O `<iframe>` original foi substituído por um visualizador construído com `pdfjs-dist` (`src/app/app/modulo/[id]/PdfPageViewer.tsx`), porque o visualizador nativo do navegador mostrava toolbar, miniaturas laterais e scroll interno — ruim em telas menores.
@@ -262,6 +296,7 @@ Também foi necessário fixar `pdfjs-dist` na versão `4.10.38` — a versão ma
 - **Rate limiting do login é em memória, por instância** — em ambiente serverless (Vercel), cada instância fria da função tem sua própria contagem; não é um limite globalmente garantido entre múltiplas instâncias simultâneas, só uma primeira barreira contra tentativas repetidas na mesma instância. Uma garantia real exigiria armazenamento compartilhado (ex: Redis/Upstash) — deixado de fora da V1 por não haver essa infraestrutura disponível ainda.
 - **Sem framework de testes formal no repositório** — a lógica crítica de cada fase foi validada com scripts ad-hoc durante o desenvolvimento (ver "Testes executados" acima), não com Jest/Vitest versionado. Migrar essas fixtures para testes de verdade é a recomendação mais simples de "dívida de qualidade" a pagar numa V2.
 - **`pdfjs-dist` fixado na versão `4.10.38`** (não a mais recente) — versões `6.x` usam sintaxe JS que o compilador do Next 14.2 não processa em certos arquivos internos da lib. Ao atualizar o Next para uma versão major nova no futuro, vale testar se `pdfjs-dist` mais recente passa a funcionar também.
+- **Percentual assistido do vídeo é autorreportado pelo cliente** (`POST /api/modulos/[id]/video-progress`) — o servidor não verifica de forma independente que o vídeo foi de fato reproduzido nesse ritmo (não há como, sem um serviço de terceiros para isso). É o mesmo trade-off já aceito para `material_accessed` em geral — um aluno tecnicamente capaz de manipular chamadas de API poderia reportar um percentual maior do que assistiu de verdade. Para a V1, aceitável; uma V2 mais rigorosa exigiria telemetria adicional (ex: variação de tempo real entre reports) para detectar reports inconsistentes.
 - **Autenticação com o Google Drive via OAuth 2.0 + refresh token de uma conta corporativa (Fase 4), em vez de Service Account** — contorna o "domain-restricted sharing" do Workspace da Shopper, mas amarra o acesso da aplicação a uma pessoa específica. Se essa conta for desativada, tiver a senha trocada com revogação de sessões, ou o consentimento OAuth revogado, o refresh token para de funcionar e precisa ser gerado de novo (ver "Configurar o acesso ao Google Drive" acima). Melhoria de produção a considerar: Domain-Wide Delegation, que exige um super-admin do Workspace autorizar a Service Account a personificar um usuário do domínio.
 - **`applySyncPlan` (Fase 5) não é atômico** — o `supabase-js` fala com o Postgres via REST, sem suporte nativo a transações multi-tabela. Cada upsert/soft-delete é aplicado individualmente; se um item falhar no meio (ex: violação do índice único de ordem de fase), os itens já aplicados antes dele permanecem gravados, e a falha é reportada em `failures` no resultado + no `summary` do `sync_history`, mas a sincronização pode ficar parcialmente aplicada. Para uma V2, considerar mover a aplicação para uma função Postgres (`plpgsql`) chamada via RPC, que aí sim roda dentro de uma transação real.
 
@@ -277,6 +312,7 @@ src/
     app/modulo/[id]/page.tsx        # página própria do módulo (Fase 8)
     app/modulo/[id]/ModuloClient.tsx # PDF + quiz, delega o visualizador ao componente abaixo
     app/modulo/[id]/PdfPageViewer.tsx # visualizador próprio de PDF (pdfjs-dist), página por página
+    app/modulo/[id]/YoutubePlayer.tsx # player de YouTube responsivo (IFrame Player API)
     admin/
       page.tsx                   # painel do gestor (links)
       usuarios/
@@ -303,6 +339,8 @@ src/
       modulos/[id]/
         pdf/route.ts               # GET serve o PDF privado (Fase 8)
         quiz/route.ts               # GET perguntas embaralhadas / POST corrige (Fase 9)
+        video-progress/route.ts      # POST recebe percentual assistido do vídeo
+        complete-video/route.ts      # POST conclui módulo de vídeo sem quiz
   components/
     LogoutButton.tsx
   lib/
@@ -322,6 +360,7 @@ src/
       googleDriveClient.ts        # autenticação + chamadas à API do Drive
       trilhaMapper.ts              # lógica pura de mapeamento da árvore
       validatePerguntas.ts          # validação de perguntas.json (§4, §8.1)
+      validateVideoJson.ts           # validação de video.json + extração do ID do YouTube
       types.ts
     sync/
       diffTrilha.ts                 # lógica pura de diff Drive x banco

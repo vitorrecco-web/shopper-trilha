@@ -65,8 +65,12 @@ export async function upsertModuleByDriveFolderId(input: {
   drive_folder_id: string;
   ordem: number;
   nome: string;
+  material_type: "pdf" | "youtube";
   pdf_drive_id: string | null;
   pdf_nome: string | null;
+  video_drive_id: string | null;
+  video_external_id: string | null;
+  video_titulo: string | null;
   questions_drive_id: string | null;
   has_questions: boolean;
   active?: boolean;

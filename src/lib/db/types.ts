@@ -49,6 +49,8 @@ export interface Phase {
   updated_at: string;
 }
 
+export type MaterialType = "pdf" | "youtube";
+
 export interface Module {
   id: string;
   phase_id: string;
@@ -56,8 +58,12 @@ export interface Module {
   drive_folder_id: string;
   ordem: number;
   nome: string;
+  material_type: MaterialType;
   pdf_drive_id: string | null;
   pdf_nome: string | null;
+  video_drive_id: string | null;
+  video_external_id: string | null;
+  video_titulo: string | null;
   questions_drive_id: string | null;
   has_questions: boolean;
   active: boolean;
@@ -75,6 +81,8 @@ export interface UserModule {
   completed: boolean;
   completed_at: string | null;
   best_score: number | null;
+  /** Percentual máximo já assistido do vídeo (0-100) — nunca regride. */
+  video_watched_percent: number | null;
   created_at: string;
   updated_at: string;
 }

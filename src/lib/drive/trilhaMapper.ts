@@ -25,12 +25,25 @@ import { FOLDER_MIME, PDF_MIME, type DriveItem, type DriveLister } from "./types
 const FASE_RE = /^Fase\s+(\d+)\s*-\s*(.+)$/i;
 const MODULO_RE = /^M[oó]dulo\s+(\d+)\b/i;
 
+export type MappedMaterialType = "pdf" | "youtube";
+
 export interface MappedModule {
   drive_folder_id: string;
   ordem: number;
   nome: string;
+  material_type: MappedMaterialType;
   pdf_drive_id: string | null;
   pdf_nome: string | null;
+  /**
+   * ID do arquivo video.json no Drive. Só o suficiente para a fase de
+   * validação de conteúdo (Fase 5) buscar e validar o JSON depois — a
+   * extração do videoId/título acontece nessa etapa seguinte, não aqui
+   * (mapTrilhaFromDrive só lista metadados, nunca busca conteúdo de
+   * arquivo — o mesmo padrão já usado para perguntas.json).
+   */
+  video_drive_id: string | null;
+  video_external_id: string | null;
+  video_titulo: string | null;
   questions_drive_id: string | null;
   has_questions: boolean;
 }
@@ -86,10 +99,20 @@ async function readModuleFolder(
 
   const pdfs = children.filter((c) => c.mimeType === PDF_MIME);
   const questionsFile = children.find((c) => c.name.toLowerCase() === "perguntas.json");
+  const videoFile = children.find((c) => c.name.toLowerCase() === "video.json");
 
-  if (pdfs.length === 0) {
+  // Regra de conteúdo: exatamente 1 PDF OU exatamente 1 video.json.
+  // Se os dois existirem ao mesmo tempo, não escolher silenciosamente —
+  // avisa e prioriza o PDF (comportamento pré-existente preservado).
+  if (pdfs.length > 0 && videoFile) {
     warnings.push(
-      `${context} > "${folder.name}": nenhum PDF encontrado (§5.1 exige exatamente 1) — módulo não pode ser publicado.`
+      `${context} > "${folder.name}": encontrado PDF e video.json juntos — um módulo só pode ter um material principal. Usando o PDF; remova um dos dois para resolver.`
+    );
+  }
+
+  if (pdfs.length === 0 && !videoFile) {
+    warnings.push(
+      `${context} > "${folder.name}": nenhum PDF nem video.json encontrado (§5.1 exige exatamente 1 material) — módulo não pode ser publicado.`
     );
   } else if (pdfs.length > 1) {
     warnings.push(
@@ -97,17 +120,27 @@ async function readModuleFolder(
     );
   }
 
-  const pdf = pdfs[0] ?? null;
+  const usesPdf = pdfs.length > 0;
+  const pdf = usesPdf ? pdfs[0] : null;
   const pdfNomeSemExtensao = pdf ? pdf.name.replace(/\.pdf$/i, "") : null;
+
+  // video.json só é considerado quando não há PDF (regra de conflito acima).
+  const effectiveVideoFile = !usesPdf ? videoFile : undefined;
 
   return {
     drive_folder_id: folder.id,
     ordem,
-    // §5.1 — o nome do PDF (sem extensão) é o título exibido; o nome da
-    // pasta só define a ordem. Sem PDF ainda, cai no nome da pasta.
+    // §5.1 — o nome do PDF (sem extensão) é o título exibido quando há
+    // PDF; a pasta só define a ordem. Para módulo em vídeo (sem PDF), o
+    // título provisório é o nome da pasta — a Fase 5 substitui pelo
+    // `titulo` do video.json depois de validar o conteúdo.
     nome: pdfNomeSemExtensao ?? folder.name,
+    material_type: effectiveVideoFile ? "youtube" : "pdf",
     pdf_drive_id: pdf?.id ?? null,
     pdf_nome: pdf?.name ?? null,
+    video_drive_id: effectiveVideoFile?.id ?? null,
+    video_external_id: null,
+    video_titulo: null,
     questions_drive_id: questionsFile?.id ?? null,
     has_questions: Boolean(questionsFile),
   };

@@ -2,6 +2,7 @@ import "server-only";
 import { mapTrilhaFromDrive, type MappedTrilha, type MappedModule } from "@/lib/drive/trilhaMapper";
 import { getGoogleDriveLister, getDriveRootFolderId, fetchDriveFileAsText } from "@/lib/drive/googleDriveClient";
 import { validatePerguntasJson } from "@/lib/drive/validatePerguntas";
+import { validateVideoJson } from "@/lib/drive/validateVideoJson";
 import {
   listAllTracks,
   upsertTrackByDriveFolderId,
@@ -23,9 +24,11 @@ import {
 import { diffTrilha, type SyncPlan, type ChangeType } from "./diffTrilha";
 
 /**
- * Lê o Drive e, para cada módulo com perguntas.json, valida o conteúdo
- * (§8.1) — se inválido, rebaixa o módulo para has_questions=false e
- * registra um aviso, sem interromper a sincronização.
+ * Lê o Drive e valida o conteúdo de perguntas.json (§8.1) e video.json —
+ * ambos seguem a mesma regra: se inválido, mostra aviso e o módulo é
+ * rebaixado (sem perguntas / sem material principal), nunca interrompe
+ * a sincronização. `mapTrilhaFromDrive` só lista metadados; buscar e
+ * validar CONTEÚDO de arquivo fica sempre aqui, depois do mapeamento.
  */
 async function fetchMappedTrilhaWithValidatedQuestions(): Promise<MappedTrilha> {
   const rootFolderId = getDriveRootFolderId();
@@ -34,23 +37,54 @@ async function fetchMappedTrilhaWithValidatedQuestions(): Promise<MappedTrilha> 
   const warnings = [...mapped.warnings];
 
   async function validateModule(mod: MappedModule, context: string): Promise<MappedModule> {
-    if (!mod.has_questions || !mod.questions_drive_id) return mod;
-    try {
-      const raw = await fetchDriveFileAsText(mod.questions_drive_id);
-      const result = validatePerguntasJson(raw);
-      if (!result.ok) {
+    let result = mod;
+
+    if (result.has_questions && result.questions_drive_id) {
+      try {
+        const raw = await fetchDriveFileAsText(result.questions_drive_id);
+        const validated = validatePerguntasJson(raw);
+        if (!validated.ok) {
+          warnings.push(
+            `${context} > "${result.nome}": perguntas.json inválido (${validated.error}) — módulo será publicado sem perguntas até ser corrigido.`
+          );
+          result = { ...result, has_questions: false, questions_drive_id: null };
+        }
+      } catch {
         warnings.push(
-          `${context} > "${mod.nome}": perguntas.json inválido (${result.error}) — módulo será publicado sem perguntas até ser corrigido.`
+          `${context} > "${result.nome}": não foi possível ler perguntas.json — módulo será publicado sem perguntas até ser corrigido.`
         );
-        return { ...mod, has_questions: false, questions_drive_id: null };
+        result = { ...result, has_questions: false, questions_drive_id: null };
       }
-      return mod;
-    } catch {
-      warnings.push(
-        `${context} > "${mod.nome}": não foi possível ler perguntas.json — módulo será publicado sem perguntas até ser corrigido.`
-      );
-      return { ...mod, has_questions: false, questions_drive_id: null };
     }
+
+    if (result.material_type === "youtube" && result.video_drive_id) {
+      try {
+        const raw = await fetchDriveFileAsText(result.video_drive_id);
+        const validated = validateVideoJson(raw);
+        if (!validated.ok) {
+          warnings.push(
+            `${context} > "${result.nome}": video.json inválido (${validated.error}) — módulo ficará sem material principal até ser corrigido.`
+          );
+          result = { ...result, video_drive_id: null, video_external_id: null, video_titulo: null };
+        } else {
+          // §5.1 equivalente para vídeo: o título vem do conteúdo do
+          // video.json (não há PDF cujo nome de arquivo possa ser usado).
+          result = {
+            ...result,
+            nome: validated.data.titulo ?? result.nome,
+            video_external_id: validated.data.videoId,
+            video_titulo: validated.data.titulo,
+          };
+        }
+      } catch {
+        warnings.push(
+          `${context} > "${result.nome}": não foi possível ler video.json — módulo ficará sem material principal até ser corrigido.`
+        );
+        result = { ...result, video_drive_id: null, video_external_id: null, video_titulo: null };
+      }
+    }
+
+    return result;
   }
 
   for (const phase of mapped.phases) {
@@ -158,8 +192,12 @@ export async function applySyncPlan(plan: SyncPlan): Promise<ApplySummary> {
         drive_folder_id: m.drive_folder_id,
         ordem: m.ordem,
         nome: m.nome,
+        material_type: m.material_type,
         pdf_drive_id: m.pdf_drive_id,
         pdf_nome: m.pdf_nome,
+        video_drive_id: m.video_drive_id,
+        video_external_id: m.video_external_id,
+        video_titulo: m.video_titulo,
         questions_drive_id: m.questions_drive_id,
         has_questions: m.has_questions,
         active: true,

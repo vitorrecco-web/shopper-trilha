@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PdfPageViewer } from "./PdfPageViewer";
+import { YoutubePlayer } from "./YoutubePlayer";
 
 interface PublicAlternativa {
   id: string;
@@ -76,7 +77,69 @@ function NextModuleLink({
   );
 }
 
+// Precisa bater com VIDEO_WATCHED_THRESHOLD_PERCENT em
+// src/lib/services/moduleAccessService.ts (a validação real é sempre
+// no servidor — este valor aqui só controla quando habilitar os
+// botões/liberar a UI do quiz, evitando um clique que o servidor
+// recusaria de qualquer forma).
+const VIDEO_WATCHED_THRESHOLD_PERCENT = 90;
+
 export function ModuloClient({
+  moduleId,
+  materialType,
+  hasQuestions,
+  videoExternalId,
+  videoTitulo,
+  initialMaterialAccessed,
+  initialVideoWatchedPercent,
+  initialCompleted,
+  initialBestScore,
+  nextModuleId,
+  nextModuleNome,
+}: {
+  moduleId: string;
+  materialType: "pdf" | "youtube";
+  hasQuestions: boolean;
+  videoExternalId: string | null;
+  videoTitulo: string | null;
+  initialMaterialAccessed: boolean;
+  initialVideoWatchedPercent: number | null;
+  initialCompleted: boolean;
+  initialBestScore: number | null;
+  nextModuleId: string | null;
+  nextModuleNome: string | null;
+}) {
+  if (materialType === "youtube") {
+    return (
+      <VideoMaterialSection
+        moduleId={moduleId}
+        videoExternalId={videoExternalId}
+        videoTitulo={videoTitulo}
+        hasQuestions={hasQuestions}
+        initialAccessed={initialMaterialAccessed}
+        initialWatchedPercent={initialVideoWatchedPercent}
+        initialCompleted={initialCompleted}
+        initialBestScore={initialBestScore}
+        nextModuleId={nextModuleId}
+        nextModuleNome={nextModuleNome}
+      />
+    );
+  }
+
+  return (
+    <PdfMaterialSection
+      moduleId={moduleId}
+      hasQuestions={hasQuestions}
+      initialMaterialAccessed={initialMaterialAccessed}
+      initialCompleted={initialCompleted}
+      initialBestScore={initialBestScore}
+      nextModuleId={nextModuleId}
+      nextModuleNome={nextModuleNome}
+    />
+  );
+}
+
+function PdfMaterialSection({
   moduleId,
   hasQuestions,
   initialMaterialAccessed,
@@ -151,6 +214,169 @@ export function ModuloClient({
         <QuizSection
           moduleId={moduleId}
           accessed={accessed}
+          initialCompleted={initialCompleted}
+          initialBestScore={initialBestScore}
+        />
+      )}
+    </div>
+  );
+}
+
+function VideoMaterialSection({
+  moduleId,
+  videoExternalId,
+  videoTitulo,
+  hasQuestions,
+  initialAccessed,
+  initialWatchedPercent,
+  initialCompleted,
+  initialBestScore,
+  nextModuleId,
+  nextModuleNome,
+}: {
+  moduleId: string;
+  videoExternalId: string | null;
+  videoTitulo: string | null;
+  hasQuestions: boolean;
+  initialAccessed: boolean;
+  initialWatchedPercent: number | null;
+  initialCompleted: boolean;
+  initialBestScore: number | null;
+  nextModuleId: string | null;
+  nextModuleNome: string | null;
+}) {
+  const [accessed, setAccessed] = useState(initialAccessed);
+  const [watchedPercent, setWatchedPercent] = useState(initialWatchedPercent ?? 0);
+  const [completedNoQuiz, setCompletedNoQuiz] = useState(initialCompleted && !hasQuestions);
+  const [completing, setCompleting] = useState(false);
+  const [completeError, setCompleteError] = useState<string | null>(null);
+  const reportingRef = useRef(false);
+
+  const thresholdReached = watchedPercent >= VIDEO_WATCHED_THRESHOLD_PERCENT;
+
+  const handleProgress = useCallback(
+    async (percent: number) => {
+      // Evita empilhar requisições se uma anterior ainda não voltou
+      // (o player reporta a cada ~3s enquanto toca).
+      if (reportingRef.current) return;
+      reportingRef.current = true;
+      try {
+        const res = await fetch(`/api/modulos/${moduleId}/video-progress`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ percent }),
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+          setWatchedPercent(data.videoWatchedPercent);
+          setAccessed(true);
+        }
+      } catch {
+        // silencioso — o próximo tick de progresso tenta de novo
+      } finally {
+        reportingRef.current = false;
+      }
+    },
+    [moduleId]
+  );
+
+  async function handleCompleteVideo() {
+    setCompleting(true);
+    setCompleteError(null);
+    try {
+      const res = await fetch(`/api/modulos/${moduleId}/complete-video`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setCompleteError(data.error ?? "Não foi possível concluir o módulo.");
+        return;
+      }
+      setCompletedNoQuiz(true);
+    } catch {
+      setCompleteError("Erro de conexão.");
+    } finally {
+      setCompleting(false);
+    }
+  }
+
+  if (!videoExternalId) {
+    return (
+      <p role="alert" style={{ color: "#ff6b6b", fontSize: 13 }}>
+        O vídeo deste módulo não está disponível. Fale com o gestor.
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      <YoutubePlayer videoId={videoExternalId} onProgress={handleProgress} />
+      {videoTitulo && (
+        <p style={{ fontSize: 13, color: "#9aa0a6", marginTop: 8, marginBottom: 0 }}>{videoTitulo}</p>
+      )}
+
+      <div style={{ marginTop: 12 }}>
+        <div style={{ height: 6, borderRadius: 999, background: "#22252b", overflow: "hidden" }}>
+          <div
+            style={{
+              height: "100%",
+              width: `${Math.min(100, watchedPercent)}%`,
+              background: thresholdReached ? "#4ECDC4" : "#7F77DD",
+              transition: "width 0.3s",
+            }}
+          />
+        </div>
+        <p style={{ fontSize: 12, color: "#9aa0a6", marginTop: 6, marginBottom: 0 }}>
+          {thresholdReached
+            ? "Percentual mínimo assistido ✓"
+            : `Assistido: ${Math.round(watchedPercent)}% (mínimo para continuar: ${VIDEO_WATCHED_THRESHOLD_PERCENT}%)`}
+        </p>
+      </div>
+
+      {!hasQuestions && (
+        <div
+          style={{
+            marginTop: 20,
+            padding: 16,
+            borderRadius: 10,
+            background: completedNoQuiz ? "#0f1a17" : "#14161a",
+            border: `1px solid ${completedNoQuiz ? "#0f3d33" : "#22252b"}`,
+          }}
+        >
+          {completedNoQuiz ? (
+            <>
+              <p style={{ color: "#4ECDC4", fontWeight: 600, fontSize: 14, margin: 0 }}>✓ Módulo concluído</p>
+              <NextModuleLink nextModuleId={nextModuleId} nextModuleNome={nextModuleNome} />
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: 13, color: "#9aa0a6", margin: 0 }}>
+                Assista pelo menos {VIDEO_WATCHED_THRESHOLD_PERCENT}% do vídeo para liberar a conclusão.
+              </p>
+              {completeError && (
+                <p role="alert" style={{ color: "#ff6b6b", fontSize: 13, marginTop: 8 }}>
+                  {completeError}
+                </p>
+              )}
+              <button
+                onClick={handleCompleteVideo}
+                disabled={!thresholdReached || completing}
+                style={{
+                  ...primaryBtn,
+                  marginTop: 10,
+                  opacity: thresholdReached ? 1 : 0.5,
+                  cursor: thresholdReached ? "pointer" : "default",
+                }}
+              >
+                {completing ? "Concluindo..." : "Concluir módulo"}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {hasQuestions && (
+        <QuizSection
+          moduleId={moduleId}
+          accessed={accessed && thresholdReached}
           initialCompleted={initialCompleted}
           initialBestScore={initialBestScore}
         />

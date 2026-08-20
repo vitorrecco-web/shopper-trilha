@@ -18,12 +18,23 @@ import { findNextModuleId } from "./progressionService";
  * "Minha Trilha" e bloqueado aqui (ou vice-versa).
  */
 
+/**
+ * Percentual mínimo assistido do vídeo para liberar "Concluir módulo"
+ * (sem quiz) ou a área de quiz (com quiz). 90% em vez de 100% — não
+ * exige que o aluno espere créditos finais/tela de encerramento; em
+ * vez de 80%, evita considerar "assistido" quem pulou uma parte
+ * relevante perto do fim.
+ */
+export const VIDEO_WATCHED_THRESHOLD_PERCENT = 90;
+
 export interface ModuleAccessInfo {
   module: Module;
   unlocked: boolean;
   completed: boolean;
   materialAccessed: boolean;
   bestScore: number | null;
+  videoWatchedPercent: number | null;
+  videoThresholdReached: boolean;
   phaseNome: string;
   nextModuleId: string | null;
   nextModuleNome: string | null;
@@ -52,12 +63,18 @@ export async function getModuleAccessInfo(
   const nextModuleId = findNextModuleId(ordered, moduleId);
   const nextModule = nextModuleId ? modules.find((m) => m.id === nextModuleId) ?? null : null;
 
+  const videoWatchedPercent = userModules.find((um) => um.module_id === moduleId)?.video_watched_percent ?? null;
+  const videoThresholdReached =
+    videoWatchedPercent !== null && videoWatchedPercent >= VIDEO_WATCHED_THRESHOLD_PERCENT;
+
   return {
     module: targetModule,
     unlocked: moduleView.unlocked,
     completed: moduleView.completed,
     materialAccessed: moduleView.materialAccessed,
     bestScore: moduleView.bestScore,
+    videoWatchedPercent,
+    videoThresholdReached,
     phaseNome: phaseView.nome,
     nextModuleId: nextModule?.id ?? null,
     nextModuleNome: nextModule?.nome ?? null,
