@@ -21,6 +21,23 @@ export async function listActiveModulesForTrack(trackId: string | null): Promise
   return data as Module[];
 }
 
+/**
+ * Versão em lote de `listActiveModulesForTrack` — busca, numa única
+ * consulta, os módulos comuns + os de todas as trilhas informadas
+ * (em vez de 1 consulta por trilha/usuário). Usada por `/admin/usuarios`
+ * para eliminar o N+1 que existia ali (2 consultas por usuário listado).
+ */
+export async function listActiveModulesForTrackIds(trackIds: string[]): Promise<Module[]> {
+  const supabase = getSupabaseServerClient();
+  let query = supabase.from("modules").select("*").eq("active", true);
+
+  query = trackIds.length > 0 ? query.or(`track_id.is.null,track_id.in.(${trackIds.join(",")})`) : query.is("track_id", null);
+
+  const { data, error } = await query.order("ordem", { ascending: true });
+  if (error) throw error;
+  return data as Module[];
+}
+
 export async function getModuleById(id: string): Promise<Module | null> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase.from("modules").select("*").eq("id", id).maybeSingle();

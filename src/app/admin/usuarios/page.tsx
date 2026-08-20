@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentSession } from "@/lib/auth/getSession";
 import { listUsersWithTrack } from "@/lib/repositories/usersRepository";
 import { listActiveTracks } from "@/lib/repositories/tracksRepository";
-import { computeUserProgress, computeTrackStatus } from "@/lib/services/userProgress";
+import { computeUsersProgressBatch, computeTrackStatus } from "@/lib/services/userProgress";
 import { theme } from "@/lib/ui/theme";
 import { Header } from "@/components/ui/Header";
 import { PageShell, Container } from "@/components/ui/Container";
@@ -17,25 +17,32 @@ export default async function UsuariosPage() {
   if (session.role !== "admin") redirect("/app");
 
   const [users, tracks] = await Promise.all([listUsersWithTrack(), listActiveTracks()]);
-  const rows: UserRow[] = await Promise.all(
-    users.map(async (u) => {
-      const progress = await computeUserProgress(u.id, u.track_id);
-      return {
-        id: u.id,
-        nome_completo: u.nome_completo,
-        matricula: u.matricula,
-        login: u.login,
-        track_id: u.track_id,
-        track_nome: u.track?.nome ?? "—",
-        cd: u.cd,
-        turno: u.turno,
-        status: u.status,
-        last_login_at: u.last_login_at,
-        progress,
-        trackStatus: computeTrackStatus(progress.percent),
-      };
-    })
+
+  // Antes: 1 chamada de computeUserProgress (2 consultas cada) POR
+  // usuário, via Promise.all — 2×N consultas simultâneas ao Supabase.
+  // Sob a base real de produção isso é candidato a estourar limite de
+  // conexão/timeout. Agora: 2 consultas no total, para qualquer N.
+  const progressByUserId = await computeUsersProgressBatch(
+    users.map((u) => ({ id: u.id, track_id: u.track_id }))
   );
+
+  const rows: UserRow[] = users.map((u) => {
+    const progress = progressByUserId.get(u.id) ?? { totalModules: 0, completedModules: 0, percent: null };
+    return {
+      id: u.id,
+      nome_completo: u.nome_completo,
+      matricula: u.matricula,
+      login: u.login,
+      track_id: u.track_id,
+      track_nome: u.track?.nome ?? "—",
+      cd: u.cd,
+      turno: u.turno,
+      status: u.status,
+      last_login_at: u.last_login_at,
+      progress,
+      trackStatus: computeTrackStatus(progress.percent),
+    };
+  });
 
   return (
     <PageShell>

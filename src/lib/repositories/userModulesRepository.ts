@@ -9,6 +9,24 @@ export async function listUserModules(userId: string): Promise<UserModule[]> {
   return data as UserModule[];
 }
 
+/**
+ * Versão em lote de `listUserModules` — busca todos os usuários numa
+ * única consulta (`user_id IN (...)`), em vez de N consultas
+ * sequenciais/paralelas por usuário. Usada por `/admin/usuarios` para
+ * evitar disparar 2×N chamadas ao Supabase de uma vez (uma por
+ * módulos + uma por user_modules, por usuário), que sob carga real de
+ * produção (mais usuários do que em teste) é um risco concreto de
+ * exceção/timeout — exatamente o tipo de causa investigada no patch
+ * corretivo cirúrgico.
+ */
+export async function listUserModulesForUsers(userIds: string[]): Promise<UserModule[]> {
+  if (userIds.length === 0) return [];
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.from("user_modules").select("*").in("user_id", userIds);
+  if (error) throw error;
+  return data as UserModule[];
+}
+
 export async function getUserModule(userId: string, moduleId: string): Promise<UserModule | null> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase

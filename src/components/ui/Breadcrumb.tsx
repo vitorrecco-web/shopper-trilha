@@ -7,6 +7,15 @@ export interface BreadcrumbItem {
 }
 
 /**
+ * Pura — decide se um item do breadcrumb deve renderizar como link real.
+ * Extraída para fora do componente especificamente para ser testável
+ * por `scripts/test-breadcrumb-link.mjs` sem precisar montar React.
+ */
+export function isBreadcrumbItemLink(item: BreadcrumbItem, isLast: boolean): boolean {
+  return Boolean(item.href) && !isLast;
+}
+
+/**
  * Substitui os antigos links textuais "← Voltar" por uma navegação
  * consistente. Item com `href` que não seja o último SEMPRE renderiza
  * como link real (`<a>`) — auditado depois de um relato de regressão
@@ -31,7 +40,7 @@ export function Breadcrumb({ items }: { items: BreadcrumbItem[] }) {
     >
       {items.map((item, i) => {
         const isLast = i === items.length - 1;
-        const isLink = Boolean(item.href) && !isLast;
+        const isLink = isBreadcrumbItemLink(item, isLast);
         return (
           <span key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
             {i > 0 && <span style={{ color: theme.color.textFaint }}>/</span>}

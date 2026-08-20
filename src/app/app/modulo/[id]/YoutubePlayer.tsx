@@ -5,27 +5,32 @@ import { useEffect, useMemo, useRef, useState } from "react";
 /**
  * Player de YouTube incorporado, responsivo (16:9).
  *
- * CAUSA REAL DO RETÂNGULO PRETO NO SAFARI/IOS (investigada a pedido,
- * depois que a correção anterior — playsinline + CSS — não resolveu):
+ * HISTÓRICO DA INVESTIGAÇÃO (retângulo preto no Safari/iOS):
+ * 1ª tentativa: CSS + `playsinline` — não era só CSS.
+ * 2ª tentativa: `<iframe>` real montado por nós + `new YT.Player(iframe, {events})`
+ *    "adotando" esse iframe já existente — ainda preto no Safari/iOS.
  *
- * A implementação anterior deixava a própria YT IFrame Player API criar
- * o `<iframe>` do zero, via `new YT.Player(div, { videoId, ... })`, sem
- * passar `origin`. Esse fluxo depende de um handshake por `postMessage`
- * entre a página e o iframe do YouTube para a API "assumir" o elemento
- * e o vídeo carregar. No Safari/iOS, com as políticas de rastreamento
- * entre sites mais estritas (ITP) que o Chrome/Android, esse handshake
- * pode falhar ou atrasar de forma que, nesse fluxo, nada de visível
- * chega a ser desenhado dentro do iframe — o "container" existe (por
- * isso o 16:9 e o botão Ampliar apareciam normalmente), mas o vídeo em
- * si nunca é carregado.
+ * CAUSA CONCRETA ENCONTRADA nesta revisão: a documentação da própria
+ * YouTube IFrame API exige que, para "adotar" um `<iframe>` já
+ * existente, ele já tenha os ATRIBUTOS HTML `width`/`height` definidos
+ * — não basta CSS. Nosso iframe só tinha o tamanho via `style` (CSS),
+ * nunca como atributo. É plausível que, sem isso, a API considere o
+ * elemento inválido para adoção e tente "corrigir"/recriar o iframe por
+ * conta própria — reintroduzindo exatamente o bug original (perda do
+ * `origin` cuidadosamente configurado), só que numa segunda carga, o
+ * que bate com o relato: "o container aparece certo, o vídeo é que não
+ * carrega".
  *
- * CORREÇÃO: parar de depender da API para CRIAR o iframe. Agora
- * montamos nós mesmos um `<iframe>` de verdade, com uma URL de embed
- * completa e válida (`enablejsapi=1`, `origin`, `playsinline=1`) — o
- * vídeo funciona mesmo que a API de tracking falhe ou demore. A YT
- * IFrame Player API só é usada depois, "adotando" esse iframe já
- * existente (modo documentado da própria API) exclusivamente para ler
- * o progresso de reprodução — nunca para criar o elemento.
+ * CORREÇÃO: os atributos `width`/`height` (valores fixos, meramente
+ * para satisfazer a API — a CSS abaixo continua controlando o tamanho
+ * visual real de forma responsiva) foram adicionados ao `<iframe>`.
+ *
+ * Arquitetura mantida como pedido: o `<iframe>` com URL de embed válida
+ * funciona sozinho, independente da API — a criação do `YT.Player` está
+ * dentro de um `try/catch` e não é requisito para o vídeo aparecer. Se
+ * a instância de tracking falhar por qualquer motivo, o vídeo continua
+ * tocando normalmente; só o percentual assistido deixa de avançar até
+ * a próxima tentativa (nunca o inverso).
  *
  * `onProgress` é chamado a cada ~3s enquanto o vídeo está tocando, com o
  * percentual (0-100) já assistido nesta reprodução — inalterado.
@@ -122,42 +127,52 @@ export function YoutubePlayer({
       if (destroyed || !iframeRef.current || !window.YT) return;
 
       // Adota o iframe JÁ EXISTENTE (criado por nós no JSX abaixo, com
-      // `src` completo) — a API não cria nada aqui, só se conecta a ele
-      // via postMessage para ler o estado de reprodução.
-      playerRef.current = new window.YT.Player(iframeRef.current, {
-        events: {
-          onStateChange: (e) => {
-            const YT = window.YT!;
-            if (e.data === YT.PlayerState.PLAYING) {
-              if (intervalRef.current) clearInterval(intervalRef.current);
-              intervalRef.current = setInterval(() => {
-                const player = playerRef.current;
-                if (!player) return;
-                const duration = player.getDuration();
-                const current = player.getCurrentTime();
-                if (duration > 0) {
-                  onProgressRef.current(Math.min(100, (current / duration) * 100));
-                }
-              }, 3000);
-            } else if (intervalRef.current) {
-              clearInterval(intervalRef.current);
-              intervalRef.current = null;
-            }
-            if (e.data === YT.PlayerState.ENDED) {
-              onProgressRef.current(100);
-            }
+      // `src` completo e agora também width/height como atributos) — a
+      // API não cria nada aqui, só se conecta a ele via postMessage
+      // para ler o estado de reprodução. Qualquer falha aqui dentro
+      // NUNCA deve afetar o iframe, que já está funcionando por conta
+      // própria antes mesmo desta chamada.
+      try {
+        playerRef.current = new window.YT.Player(iframeRef.current, {
+          events: {
+            onStateChange: (e) => {
+              const YT = window.YT!;
+              if (e.data === YT.PlayerState.PLAYING) {
+                if (intervalRef.current) clearInterval(intervalRef.current);
+                intervalRef.current = setInterval(() => {
+                  const player = playerRef.current;
+                  if (!player) return;
+                  const duration = player.getDuration();
+                  const current = player.getCurrentTime();
+                  if (duration > 0) {
+                    onProgressRef.current(Math.min(100, (current / duration) * 100));
+                  }
+                }, 3000);
+              } else if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+              }
+              if (e.data === YT.PlayerState.ENDED) {
+                onProgressRef.current(100);
+              }
+            },
+            onError: (e) => {
+              // Diagnóstico visível só do código numérico — nunca expõe
+              // nada sensível, e ajuda a identificar rapidamente se um
+              // vídeo específico tem embed bloqueado pelo dono (101/150)
+              // em vez de ser um problema do player em si.
+              const detail = YT_ERROR_MESSAGES[e.data] ?? `código ${e.data}`;
+              console.error("YouTube player onError:", e.data, detail);
+              setDiagnostic(`Não foi possível carregar o vídeo (${detail}).`);
+            },
           },
-          onError: (e) => {
-            // Diagnóstico visível só do código numérico — nunca expõe
-            // nada sensível, e ajuda a identificar rapidamente se um
-            // vídeo específico tem embed bloqueado pelo dono (101/150)
-            // em vez de ser um problema do player em si.
-            const detail = YT_ERROR_MESSAGES[e.data] ?? `código ${e.data}`;
-            console.error("YouTube player onError:", e.data, detail);
-            setDiagnostic(`Não foi possível carregar o vídeo (${detail}).`);
-          },
-        },
-      });
+        });
+      } catch (err) {
+        // O vídeo (iframe) já está renderizado e funcional independente
+        // disso — uma falha aqui só significa que o percentual assistido
+        // não vai avançar, nunca que o vídeo para de tocar.
+        console.error("Falha ao inicializar o tracking do YouTube:", err);
+      }
     });
 
     return () => {
@@ -186,6 +201,13 @@ export function YoutubePlayer({
         ref={iframeRef}
         src={embedSrc}
         title="Vídeo do módulo"
+        // width/height como ATRIBUTOS reais (não só CSS) — exigido pela
+        // documentação da YouTube IFrame API para "adotar" um iframe já
+        // existente. O valor em si é só um placeholder: quem controla o
+        // tamanho visual de verdade é a CSS logo abaixo (position:
+        // absolute + 100%), de forma responsiva.
+        width={640}
+        height={360}
         // Atributos "allow" recomendados pelo próprio YouTube para o
         // player funcionar corretamente em navegadores mobile,
         // incluindo Safari/iOS.

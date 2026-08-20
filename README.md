@@ -382,6 +382,35 @@ supabase/
     0002_service_role_grants.sql
 ```
 
+## Patch corretivo cirúrgico #2 (produção quebrada)
+
+### Prioridade 1 — `/admin/usuarios` quebrando em produção
+
+**Causa mais provável encontrada:** a página disparava `computeUserProgress` **uma vez por usuário listado**, cada chamada fazendo 2 consultas sequenciais ao Supabase (`listActiveModulesForTrack` + `listUserModules`) — tudo isso dentro de um `Promise.all` no nível da página, ou seja, **2×N consultas simultâneas** ao banco. Com poucos usuários de teste isso nunca dava problema; com a base real de produção (mais usuários), é um candidato concreto para estourar limite de conexão/taxa do Supabase, produzindo exatamente uma exceção server-side sem nenhuma mudança visual envolvida.
+
+Auditei também toda a fronteira server/client (`"use client"` importando algo `server-only`, props após o redesign, serialização Server→Client) e não encontrei nenhuma violação — os componentes de UI compartilhados (`Header`, `Badge`, `Button` etc.) só importam `theme.ts` (puro) e outros componentes de UI, nunca repositórios/`server-only`.
+
+**Correção:** duas novas funções em lote (`listActiveModulesForTrackIds`, `listUserModulesForUsers`) + `computeUsersProgressBatch`, que fazem o equivalente com **2 consultas totais, não importa quantos usuários existam** — `/admin/usuarios/page.tsx` agora usa essa versão. `computeUserProgress` (usada na tela de detalhe, 1 usuário por vez) continua igual. Testei que a versão em lote produz exatamente o mesmo resultado da versão antiga, por usuário, em 5 cenários (trilhas diferentes, usuário sem trilha, trilha sem módulo próprio) — 5/5 idênticos.
+
+**Se ainda quebrar depois deste patch**, preciso do trecho de log da Vercel em **Deployments → (deployment atual) → Runtime Logs**, filtrando pelo timestamp do erro ou pelo Digest `2142402853` — isso mostra a mensagem/stack real por trás do erro genérico, e eu confirmo ou revejo a causa.
+
+### Prioridade 2 — Breadcrumb "Minha Trilha"
+
+Adicionado **teste automatizado real**, checado no repositório: `scripts/test-breadcrumb-link.mjs` (rodar com `npm run test:breadcrumb`). Ele compila o `Breadcrumb.tsx` **de verdade** (não uma cópia/reimplementação) e:
+1. Confirma a lógica pura (`isBreadcrumbItemLink`, extraída do componente) considera link qualquer item com `href` que não seja o último.
+2. Renderiza o componente real com os mesmos itens da página do módulo e confirma que o HTML resultante contém `<a href="/app">Minha Trilha</a>` de verdade.
+3. Confirma, por checagem estrutural do código-fonte, que `src/app/app/modulo/[id]/page.tsx` ainda passa `href: "/app"` — protege contra uma edição futura remover isso sem querer.
+
+**7/7 passando.** Como nota de transparência: auditei a lógica anterior e ela já estava correta por inspeção — não encontrei uma causa de código definitiva para a regressão relatada. Reforcei mesmo assim (cor/hover de link real) no patch anterior; este teste automatizado agora existe para nunca mais precisarmos descobrir isso "no olho".
+
+### Prioridade 3 — YouTube no Safari/iPhone (causa concreta encontrada)
+
+A correção anterior ("adotar" um iframe já existente via `new YT.Player(iframe, {events})`) ainda tinha um problema: a documentação da própria YouTube IFrame API exige que, para adotar um iframe já existente, ele tenha os **atributos HTML `width`/`height` definidos** — não basta CSS. Nosso iframe só tinha o tamanho via `style`. É plausível que, sem os atributos, a API considere o elemento inválido para adoção e tente recriá-lo por conta própria — reintroduzindo o bug original numa segunda carga (bate com o relato: "container aparece certo, vídeo não carrega").
+
+**Correção:** adicionados `width={640} height={360}` como atributos HTML reais no `<iframe>` (a CSS continua controlando o tamanho visual responsivo — os valores em si são só placeholders para satisfazer a API). A criação do `YT.Player` agora está dentro de um `try/catch`: qualquer falha ali nunca afeta o iframe, que já é funcional por conta própria antes mesmo dessa chamada (arquitetura pedida: vídeo nunca depende da API para aparecer, API só para tracking).
+
+**Degradação assumida, como pedido antes de mudar qualquer regra:** se o tracking falhar por qualquer motivo, o vídeo continua tocando normalmente — só o percentual assistido não avança naquela sessão, e a exigência de 90% para concluir/liberar quiz permanece intacta (nunca relaxada). Isso nunca foi observado nos testes, é só a garantia estrutural da arquitetura.
+
 ## Patch corretivo pós-testes reais (regressões do Modo de Estudo)
 
 Depois de testes reais em desktop e iPhone, apareceram regressões e um bug ainda não resolvido. Este patch corrige tudo sem tocar banco, APIs, progressão, quiz, Drive ou autenticação.
