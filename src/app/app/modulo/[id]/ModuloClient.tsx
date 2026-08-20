@@ -11,32 +11,6 @@ import { FocusOverlay, ExpandButton } from "@/components/ui/FocusOverlay";
 import { PdfPageViewer, type PdfPageViewerHandle } from "./PdfPageViewer";
 import { YoutubePlayer } from "./YoutubePlayer";
 
-interface PublicAlternativa {
-  id: string;
-  texto: string;
-}
-interface PublicPergunta {
-  id: string;
-  pergunta: string;
-  alternativas: PublicAlternativa[];
-}
-interface PerQuestionResult {
-  questionId: string;
-  correct: boolean;
-  explicacao: string | null;
-}
-interface SubmitResult {
-  ok: boolean;
-  score: number;
-  correctAnswers: number;
-  totalQuestions: number;
-  passed: boolean;
-  perQuestion: PerQuestionResult[];
-  nextModuleId: string | null;
-  nextModuleNome: string | null;
-  error?: string;
-}
-
 function NextModuleLink({
   nextModuleId,
   nextModuleNome,
@@ -297,7 +271,7 @@ function PdfMaterialSection({
       )}
 
       {hasQuestions && (
-        <QuizSection
+        <AvaliacaoSection
           moduleId={moduleId}
           accessed={accessed}
           initialCompleted={initialCompleted}
@@ -458,7 +432,7 @@ function VideoMaterialSection({
       )}
 
       {hasQuestions && (
-        <QuizSection
+        <AvaliacaoSection
           moduleId={moduleId}
           accessed={accessed && thresholdReached}
           initialCompleted={initialCompleted}
@@ -469,7 +443,7 @@ function VideoMaterialSection({
   );
 }
 
-function QuizSection({
+function AvaliacaoSection({
   moduleId,
   accessed,
   initialCompleted,
@@ -480,168 +454,28 @@ function QuizSection({
   initialCompleted: boolean;
   initialBestScore: number | null;
 }) {
-  const [perguntas, setPerguntas] = useState<PublicPergunta[] | null>(null);
-  const [loadingQuiz, setLoadingQuiz] = useState(false);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [result, setResult] = useState<SubmitResult | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function loadQuiz() {
-    setLoadingQuiz(true);
-    setError(null);
-    setResult(null);
-    setAnswers({});
-    try {
-      const res = await fetch(`/api/modulos/${moduleId}/quiz`);
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        setError(data.error ?? "Não foi possível carregar o quiz.");
-        return;
-      }
-      setPerguntas(data.perguntas);
-    } catch {
-      setError("Erro de conexão.");
-    } finally {
-      setLoadingQuiz(false);
-    }
-  }
-
-  async function handleSubmit() {
-    if (!perguntas) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const payload = {
-        answers: perguntas.map((p) => ({ questionId: p.id, alternativaId: answers[p.id] ?? "" })),
-      };
-      const res = await fetch(`/api/modulos/${moduleId}/quiz`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = (await res.json()) as SubmitResult;
-      if (!res.ok || !data.ok) {
-        setError(data.error ?? "Não foi possível enviar as respostas.");
-        return;
-      }
-      setResult(data);
-      setPerguntas(null);
-    } catch {
-      setError("Erro de conexão.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   if (!accessed) {
     return (
       <p style={{ fontSize: 13, color: theme.color.textMuted, marginTop: 20 }}>
-        Acesse o material acima primeiro para liberar o quiz.
+        Acesse o material acima primeiro para liberar a avaliação.
       </p>
     );
   }
 
   return (
     <div style={{ marginTop: 20 }}>
-      <h2 style={{ fontSize: 15, marginBottom: 8, color: theme.color.text }}>Quiz</h2>
+      <h2 style={{ fontSize: 15, marginBottom: 8, color: theme.color.text }}>Avaliação</h2>
 
-      {initialCompleted && !result && !perguntas && (
+      {initialCompleted && (
         <p style={{ fontSize: 13, color: theme.color.primaryDark, marginBottom: 10 }}>
           ✓ Você já foi aprovado neste módulo{initialBestScore !== null ? ` (melhor nota: ${initialBestScore}%)` : ""}
-          . Tentativas continuam permitidas se quiser tentar de novo.
+          . Pode refazer a prova se quiser tentar de novo.
         </p>
       )}
 
-      {!perguntas && !result && (
-        <Button onClick={loadQuiz} disabled={loadingQuiz}>
-          {loadingQuiz ? "Carregando..." : initialCompleted ? "Tentar de novo" : "Responder o quiz"}
-        </Button>
-      )}
-
-      {error && <p style={{ color: theme.color.danger, fontSize: 13, marginTop: 10 }}>{error}</p>}
-
-      {perguntas && !result && (
-        <div>
-          {perguntas.map((p, i) => (
-            <div key={p.id} style={{ marginBottom: 18 }}>
-              <p style={{ fontSize: 14, marginBottom: 6, color: theme.color.text }}>
-                {i + 1}. {p.pergunta}
-              </p>
-              {p.alternativas.map((a) => (
-                <label
-                  key={a.id}
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    alignItems: "baseline",
-                    fontSize: 13,
-                    color: theme.color.text,
-                    padding: "6px 0",
-                    cursor: "pointer",
-                    minHeight: 32, // área de toque confortável em mobile
-                  }}
-                >
-                  <input
-                    type="radio"
-                    name={p.id}
-                    value={a.id}
-                    checked={answers[p.id] === a.id}
-                    onChange={() => setAnswers((prev) => ({ ...prev, [p.id]: a.id }))}
-                  />
-                  {a.texto}
-                </label>
-              ))}
-            </div>
-          ))}
-          <Button onClick={handleSubmit} disabled={submitting}>
-            {submitting ? "Enviando..." : "Enviar respostas"}
-          </Button>
-        </div>
-      )}
-
-      {result && (
-        <div>
-          <p
-            style={{
-              fontSize: 15,
-              fontWeight: 600,
-              color: result.passed ? theme.color.primaryDark : theme.color.danger,
-              marginBottom: 10,
-            }}
-          >
-            {result.passed ? "✓ Aprovado" : "Não atingiu a nota mínima (70%)"} — {result.score}% (
-            {result.correctAnswers}/{result.totalQuestions})
-          </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {result.perQuestion.map((r, i) => (
-              <div
-                key={r.questionId}
-                style={{
-                  fontSize: 13,
-                  padding: "8px 10px",
-                  borderRadius: theme.radius.md,
-                  background: r.correct ? theme.color.primaryLight : theme.color.dangerBg,
-                }}
-              >
-                <span style={{ color: r.correct ? theme.color.primaryDark : theme.color.danger, fontWeight: 700 }}>
-                  {r.correct ? "✓" : "✗"}
-                </span>{" "}
-                <span style={{ color: theme.color.text }}>Pergunta {i + 1}</span>
-                {r.explicacao && <p style={{ margin: "4px 0 0", color: theme.color.textMuted }}>{r.explicacao}</p>}
-              </div>
-            ))}
-          </div>
-
-          {result.passed ? (
-            <NextModuleLink nextModuleId={result.nextModuleId} nextModuleNome={result.nextModuleNome} />
-          ) : (
-            <Button variant="secondary" onClick={loadQuiz} style={{ marginTop: 12 }}>
-              Tentar de novo
-            </Button>
-          )}
-        </div>
-      )}
+      <Link href={`/app/modulo/${moduleId}/quiz`} style={buttonStyle("primary")}>
+        {initialCompleted ? "Fazer prova novamente" : "Iniciar prova"}
+      </Link>
     </div>
   );
 }
