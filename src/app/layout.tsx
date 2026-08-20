@@ -4,12 +4,14 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Shopper Trilha",
   description: "Trilha de capacitação para supervisores — Shopper",
+  icons: { icon: "/shopper-logo.png" },
 };
 
 // Mobile-first: viewport correto desde já (§10.1 — prioridade para celular).
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  themeColor: "#1FA97A",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

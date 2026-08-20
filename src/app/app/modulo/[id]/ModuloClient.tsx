@@ -3,6 +3,9 @@
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { theme } from "@/lib/ui/theme";
+import { Button, buttonStyle } from "@/components/ui/Button";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { PdfPageViewer } from "./PdfPageViewer";
 import { YoutubePlayer } from "./YoutubePlayer";
 
@@ -32,27 +35,6 @@ interface SubmitResult {
   error?: string;
 }
 
-const primaryBtn: React.CSSProperties = {
-  padding: "10px 16px",
-  borderRadius: 8,
-  border: "none",
-  background: "#4ECDC4",
-  color: "#0f1115",
-  fontWeight: 600,
-  fontSize: 14,
-  cursor: "pointer",
-};
-
-const secondaryBtn: React.CSSProperties = {
-  padding: "10px 16px",
-  borderRadius: 8,
-  border: "1px solid #2a2d34",
-  background: "transparent",
-  color: "#f2f2f2",
-  fontSize: 14,
-  cursor: "pointer",
-};
-
 function NextModuleLink({
   nextModuleId,
   nextModuleNome,
@@ -62,16 +44,13 @@ function NextModuleLink({
 }) {
   if (!nextModuleId) {
     return (
-      <p style={{ fontSize: 13, color: "#9aa0a6", marginTop: 10 }}>
+      <p style={{ fontSize: 13, color: theme.color.textMuted, marginTop: 10 }}>
         Você concluiu o último módulo disponível até agora. 🎉
       </p>
     );
   }
   return (
-    <Link
-      href={`/app/modulo/${nextModuleId}`}
-      style={{ ...primaryBtn, display: "inline-block", marginTop: 10, textDecoration: "none" }}
-    >
+    <Link href={`/app/modulo/${nextModuleId}`} style={{ ...buttonStyle("primary"), marginTop: 10 }}>
       Ir para o próximo módulo: {nextModuleNome} →
     </Link>
   );
@@ -182,7 +161,7 @@ function PdfMaterialSection({
       </div>
       <a
         href={`/api/modulos/${moduleId}/pdf?download=1`}
-        style={{ fontSize: 13, color: "#4ECDC4", textDecoration: "none" }}
+        style={{ fontSize: 13, color: theme.color.primaryDark, textDecoration: "none", fontWeight: 600 }}
       >
         ⭳ Baixar PDF
       </a>
@@ -192,18 +171,20 @@ function PdfMaterialSection({
           style={{
             marginTop: 20,
             padding: 16,
-            borderRadius: 10,
-            background: completedNoQuiz ? "#0f1a17" : "#14161a",
-            border: `1px solid ${completedNoQuiz ? "#0f3d33" : "#22252b"}`,
+            borderRadius: theme.radius.lg,
+            background: completedNoQuiz ? theme.color.primaryLight : theme.color.bg,
+            border: `1px solid ${completedNoQuiz ? theme.color.primary : theme.color.border}`,
           }}
         >
           {completedNoQuiz ? (
             <>
-              <p style={{ color: "#4ECDC4", fontWeight: 600, fontSize: 14, margin: 0 }}>✓ Módulo concluído</p>
+              <p style={{ color: theme.color.primaryDark, fontWeight: 600, fontSize: 14, margin: 0 }}>
+                ✓ Módulo concluído
+              </p>
               <NextModuleLink nextModuleId={nextModuleId} nextModuleNome={nextModuleNome} />
             </>
           ) : (
-            <p style={{ fontSize: 13, color: "#9aa0a6", margin: 0 }}>
+            <p style={{ fontSize: 13, color: theme.color.textMuted, margin: 0 }}>
               Este módulo não tem quiz — ele é concluído automaticamente ao acessar o material acima.
             </p>
           )}
@@ -300,7 +281,7 @@ function VideoMaterialSection({
 
   if (!videoExternalId) {
     return (
-      <p role="alert" style={{ color: "#ff6b6b", fontSize: 13 }}>
+      <p role="alert" style={{ color: theme.color.danger, fontSize: 13 }}>
         O vídeo deste módulo não está disponível. Fale com o gestor.
       </p>
     );
@@ -310,21 +291,12 @@ function VideoMaterialSection({
     <div>
       <YoutubePlayer videoId={videoExternalId} onProgress={handleProgress} />
       {videoTitulo && (
-        <p style={{ fontSize: 13, color: "#9aa0a6", marginTop: 8, marginBottom: 0 }}>{videoTitulo}</p>
+        <p style={{ fontSize: 13, color: theme.color.textMuted, marginTop: 8, marginBottom: 0 }}>{videoTitulo}</p>
       )}
 
       <div style={{ marginTop: 12 }}>
-        <div style={{ height: 6, borderRadius: 999, background: "#22252b", overflow: "hidden" }}>
-          <div
-            style={{
-              height: "100%",
-              width: `${Math.min(100, watchedPercent)}%`,
-              background: thresholdReached ? "#4ECDC4" : "#7F77DD",
-              transition: "width 0.3s",
-            }}
-          />
-        </div>
-        <p style={{ fontSize: 12, color: "#9aa0a6", marginTop: 6, marginBottom: 0 }}>
+        <ProgressBar percent={watchedPercent} tone={thresholdReached ? "primary" : "warning"} height={6} />
+        <p style={{ fontSize: 12, color: theme.color.textMuted, marginTop: 6, marginBottom: 0 }}>
           {thresholdReached
             ? "Percentual mínimo assistido ✓"
             : `Assistido: ${Math.round(watchedPercent)}% (mínimo para continuar: ${VIDEO_WATCHED_THRESHOLD_PERCENT}%)`}
@@ -336,38 +308,31 @@ function VideoMaterialSection({
           style={{
             marginTop: 20,
             padding: 16,
-            borderRadius: 10,
-            background: completedNoQuiz ? "#0f1a17" : "#14161a",
-            border: `1px solid ${completedNoQuiz ? "#0f3d33" : "#22252b"}`,
+            borderRadius: theme.radius.lg,
+            background: completedNoQuiz ? theme.color.primaryLight : theme.color.bg,
+            border: `1px solid ${completedNoQuiz ? theme.color.primary : theme.color.border}`,
           }}
         >
           {completedNoQuiz ? (
             <>
-              <p style={{ color: "#4ECDC4", fontWeight: 600, fontSize: 14, margin: 0 }}>✓ Módulo concluído</p>
+              <p style={{ color: theme.color.primaryDark, fontWeight: 600, fontSize: 14, margin: 0 }}>
+                ✓ Módulo concluído
+              </p>
               <NextModuleLink nextModuleId={nextModuleId} nextModuleNome={nextModuleNome} />
             </>
           ) : (
             <>
-              <p style={{ fontSize: 13, color: "#9aa0a6", margin: 0 }}>
+              <p style={{ fontSize: 13, color: theme.color.textMuted, margin: 0 }}>
                 Assista pelo menos {VIDEO_WATCHED_THRESHOLD_PERCENT}% do vídeo para liberar a conclusão.
               </p>
               {completeError && (
-                <p role="alert" style={{ color: "#ff6b6b", fontSize: 13, marginTop: 8 }}>
+                <p role="alert" style={{ color: theme.color.danger, fontSize: 13, marginTop: 8 }}>
                   {completeError}
                 </p>
               )}
-              <button
-                onClick={handleCompleteVideo}
-                disabled={!thresholdReached || completing}
-                style={{
-                  ...primaryBtn,
-                  marginTop: 10,
-                  opacity: thresholdReached ? 1 : 0.5,
-                  cursor: thresholdReached ? "pointer" : "default",
-                }}
-              >
+              <Button onClick={handleCompleteVideo} disabled={!thresholdReached || completing} style={{ marginTop: 10 }}>
                 {completing ? "Concluindo..." : "Concluir módulo"}
-              </button>
+              </Button>
             </>
           )}
         </div>
@@ -452,7 +417,7 @@ function QuizSection({
 
   if (!accessed) {
     return (
-      <p style={{ fontSize: 13, color: "#9aa0a6", marginTop: 20 }}>
+      <p style={{ fontSize: 13, color: theme.color.textMuted, marginTop: 20 }}>
         Acesse o material acima primeiro para liberar o quiz.
       </p>
     );
@@ -460,28 +425,28 @@ function QuizSection({
 
   return (
     <div style={{ marginTop: 20 }}>
-      <h2 style={{ fontSize: 15, marginBottom: 8 }}>Quiz</h2>
+      <h2 style={{ fontSize: 15, marginBottom: 8, color: theme.color.text }}>Quiz</h2>
 
       {initialCompleted && !result && !perguntas && (
-        <p style={{ fontSize: 13, color: "#4ECDC4", marginBottom: 10 }}>
+        <p style={{ fontSize: 13, color: theme.color.primaryDark, marginBottom: 10 }}>
           ✓ Você já foi aprovado neste módulo{initialBestScore !== null ? ` (melhor nota: ${initialBestScore}%)` : ""}
           . Tentativas continuam permitidas se quiser tentar de novo.
         </p>
       )}
 
       {!perguntas && !result && (
-        <button onClick={loadQuiz} disabled={loadingQuiz} style={primaryBtn}>
+        <Button onClick={loadQuiz} disabled={loadingQuiz}>
           {loadingQuiz ? "Carregando..." : initialCompleted ? "Tentar de novo" : "Responder o quiz"}
-        </button>
+        </Button>
       )}
 
-      {error && <p style={{ color: "#ff6b6b", fontSize: 13, marginTop: 10 }}>{error}</p>}
+      {error && <p style={{ color: theme.color.danger, fontSize: 13, marginTop: 10 }}>{error}</p>}
 
       {perguntas && !result && (
         <div>
           {perguntas.map((p, i) => (
             <div key={p.id} style={{ marginBottom: 18 }}>
-              <p style={{ fontSize: 14, marginBottom: 6 }}>
+              <p style={{ fontSize: 14, marginBottom: 6, color: theme.color.text }}>
                 {i + 1}. {p.pergunta}
               </p>
               {p.alternativas.map((a) => (
@@ -492,8 +457,10 @@ function QuizSection({
                     gap: 8,
                     alignItems: "baseline",
                     fontSize: 13,
-                    padding: "5px 0",
+                    color: theme.color.text,
+                    padding: "6px 0",
                     cursor: "pointer",
+                    minHeight: 32, // área de toque confortável em mobile
                   }}
                 >
                   <input
@@ -508,9 +475,9 @@ function QuizSection({
               ))}
             </div>
           ))}
-          <button onClick={handleSubmit} disabled={submitting} style={primaryBtn}>
+          <Button onClick={handleSubmit} disabled={submitting}>
             {submitting ? "Enviando..." : "Enviar respostas"}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -520,7 +487,7 @@ function QuizSection({
             style={{
               fontSize: 15,
               fontWeight: 600,
-              color: result.passed ? "#4ECDC4" : "#ff8a8a",
+              color: result.passed ? theme.color.primaryDark : theme.color.danger,
               marginBottom: 10,
             }}
           >
@@ -534,13 +501,15 @@ function QuizSection({
                 style={{
                   fontSize: 13,
                   padding: "8px 10px",
-                  borderRadius: 8,
-                  background: r.correct ? "#0f1a17" : "#1a1212",
+                  borderRadius: theme.radius.md,
+                  background: r.correct ? theme.color.primaryLight : theme.color.dangerBg,
                 }}
               >
-                <span style={{ color: r.correct ? "#4ECDC4" : "#ff8a8a" }}>{r.correct ? "✓" : "✗"}</span> Pergunta{" "}
-                {i + 1}
-                {r.explicacao && <p style={{ margin: "4px 0 0", color: "#9aa0a6" }}>{r.explicacao}</p>}
+                <span style={{ color: r.correct ? theme.color.primaryDark : theme.color.danger, fontWeight: 700 }}>
+                  {r.correct ? "✓" : "✗"}
+                </span>{" "}
+                <span style={{ color: theme.color.text }}>Pergunta {i + 1}</span>
+                {r.explicacao && <p style={{ margin: "4px 0 0", color: theme.color.textMuted }}>{r.explicacao}</p>}
               </div>
             ))}
           </div>
@@ -548,9 +517,9 @@ function QuizSection({
           {result.passed ? (
             <NextModuleLink nextModuleId={result.nextModuleId} nextModuleNome={result.nextModuleNome} />
           ) : (
-            <button onClick={loadQuiz} style={{ ...secondaryBtn, marginTop: 12 }}>
+            <Button variant="secondary" onClick={loadQuiz} style={{ marginTop: 12 }}>
               Tentar de novo
-            </button>
+            </Button>
           )}
         </div>
       )}

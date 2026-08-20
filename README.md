@@ -382,6 +382,24 @@ supabase/
     0002_service_role_grants.sql
 ```
 
+## REDESIGN V1 — identidade visual Shopper
+
+Toda a funcionalidade da V1 foi preservada; só apresentação/navegação mudaram.
+
+- **`src/lib/ui/theme.ts`** — tokens de design (fonte única de verdade): verde Shopper como cor principal, fundo claro, grafite para texto, amarelo/vermelho só para atenção/bloqueio/erro. Nenhum componente novo tem hex solto — sempre importa daqui.
+- **`src/components/ui/`** (novos, reutilizáveis): `Logo`, `Header`, `Container`/`PageShell`, `Button`, `Card`/`ClickableCard`, `Badge`, `Breadcrumb`, `ProgressBar`. Evita duplicação de estilo entre páginas.
+- **`public/shopper-logo.png`** — o logo oficial da Shopper, extraído de um documento real da trilha (POP) já existente no Drive, a pedido explícito de não inventar/redesenhar a marca. O componente `<Logo>` usa `alt="Shopper"` como rede de segurança: se o arquivo um dia não existir numa cópia do projeto, o nome da marca ainda aparece no lugar da imagem.
+- **`/`** agora é só roteamento (não autenticado → `/login`; student → `/app`; admin → `/admin`) — a página técnica com "Fase 2 concluída" e links de diagnóstico não existe mais para o usuário. `/api/health` continua exatamente igual, só não é mais linkado.
+- **`/admin`** — os dois links de texto viraram cards clicáveis. Há uma seção reservada para o dashboard gerencial futuro (total de colaboradores, % de conclusão, notas médias, etc) mostrando só uma nota "em breve" — **nenhum dado fictício foi criado**, como pedido.
+- Todas as demais páginas (`/login`, `/admin/usuarios*`, `/admin/drive`, `/app`, `/app/modulo/[id]`) foram adaptadas ao tema claro, com breadcrumb no lugar dos links "← Voltar" textuais.
+- O leitor de PDF (página por página, Anterior/Próxima) e o player de YouTube da Fase 8/9 mantêm exatamente a mesma lógica — só as cores do chrome em volta mudaram.
+- Mobile: alvos de toque com no mínimo 40-44px de altura, tabelas com scroll horizontal dedicado (`.table-scroll`), foco sempre visível (`:focus-visible` com a cor da marca) para acessibilidade de teclado.
+
+### Decisões de design
+
+- **Sem CSS-in-JS/Tailwind novo** — o projeto já usava 100% inline styles; introduzir um sistema diferente no meio do redesign seria uma refatoração estrutural fora do escopo pedido (item 11). Os tokens em `theme.ts` resolvem a duplicação de cor sem trocar a abordagem.
+- **Nome do usuário no header trunca em vez de esconder** — testei escondê-lo em mobile via classe CSS, mas isso exigiria uma media query nova em `globals.css` só para essa decisão; truncar com `text-overflow: ellipsis` resolve com CSS inline já existente no projeto.
+
 ## V1 concluída
 
 As 11 fases do `EXECUTION_PLAN.md` estão implementadas e validadas em produção. Os itens em aberto estão listados em "Débito técnico conhecido" acima — nenhum deles bloqueia o uso real pelos supervisores, são todos candidatos a uma V2.

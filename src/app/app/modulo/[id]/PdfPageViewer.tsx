@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import { theme } from "@/lib/ui/theme";
 
 /**
  * Visualizador próprio de PDF: mostra 1 página por vez, centralizada e
@@ -138,7 +139,7 @@ export function PdfPageViewer({ moduleId, onLoaded }: { moduleId: string; onLoad
 
   if (error) {
     return (
-      <p role="alert" style={{ color: "#ff6b6b", fontSize: 13 }}>
+      <p role="alert" style={{ color: theme.color.danger, fontSize: 13 }}>
         {error}
       </p>
     );
@@ -152,8 +153,9 @@ export function PdfPageViewer({ moduleId, onLoaded }: { moduleId: string; onLoad
       <div
         ref={containerRef}
         style={{
-          border: "1px solid #22252b",
-          borderRadius: 10,
+          border: `1px solid ${theme.color.border}`,
+          borderRadius: theme.radius.lg,
+          boxShadow: theme.shadow.sm,
           overflow: "hidden",
           background: "#fff",
           display: "flex",
@@ -162,7 +164,7 @@ export function PdfPageViewer({ moduleId, onLoaded }: { moduleId: string; onLoad
         }}
       >
         {loading ? (
-          <p style={{ color: "#9aa0a6", fontSize: 13, alignSelf: "center", padding: 40, margin: 0 }}>
+          <p style={{ color: theme.color.textMuted, fontSize: 13, alignSelf: "center", padding: 40, margin: 0 }}>
             Carregando material...
           </p>
         ) : (
@@ -172,7 +174,7 @@ export function PdfPageViewer({ moduleId, onLoaded }: { moduleId: string; onLoad
 
       {!loading && numPages > 0 && (
         <>
-          <p style={{ textAlign: "center", fontSize: 13, color: "#9aa0a6", margin: "10px 0" }}>
+          <p style={{ textAlign: "center", fontSize: 13, color: theme.color.textMuted, margin: "10px 0" }}>
             {rendering ? "Carregando página..." : `Página ${currentPage} de ${numPages}`}
           </p>
           <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
@@ -181,13 +183,14 @@ export function PdfPageViewer({ moduleId, onLoaded }: { moduleId: string; onLoad
               disabled={isFirst}
               style={{
                 padding: "12px 22px",
-                borderRadius: 8,
-                border: "1px solid #2a2d34",
-                background: isFirst ? "transparent" : "#181a1f",
-                color: isFirst ? "#5a5f68" : "#f2f2f2",
+                borderRadius: theme.radius.md,
+                border: `1px solid ${theme.color.border}`,
+                background: isFirst ? theme.color.bg : theme.color.surface,
+                color: isFirst ? theme.color.textFaint : theme.color.text,
                 fontSize: 14,
                 fontWeight: 600,
                 cursor: isFirst ? "default" : "pointer",
+                minHeight: 44,
               }}
             >
               ← Anterior
@@ -197,13 +200,14 @@ export function PdfPageViewer({ moduleId, onLoaded }: { moduleId: string; onLoad
               disabled={isLast}
               style={{
                 padding: "12px 22px",
-                borderRadius: 8,
+                borderRadius: theme.radius.md,
                 border: "none",
-                background: isLast ? "#2a2d34" : "#4ECDC4",
-                color: isLast ? "#6a6f78" : "#0f1115",
+                background: isLast ? theme.color.border : theme.color.primary,
+                color: isLast ? theme.color.textFaint : "#fff",
                 fontSize: 14,
                 fontWeight: 600,
                 cursor: isLast ? "default" : "pointer",
+                minHeight: 44,
               }}
             >
               Próxima →

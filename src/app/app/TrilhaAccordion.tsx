@@ -3,17 +3,27 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { TrilhaView } from "@/lib/services/trilhaView";
+import { theme } from "@/lib/ui/theme";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 
 function ModuleRow({ m }: { m: TrilhaView["phases"][number]["modules"][number] }) {
   const icon = m.completed ? "✓" : m.unlocked ? (m.isCurrent ? "▶" : "○") : "🔒";
-  const iconColor = m.completed ? "#4ECDC4" : m.unlocked ? (m.isCurrent ? "#7F77DD" : "#9aa0a6") : "#5a5f68";
+  const iconColor = m.completed
+    ? theme.color.primary
+    : m.unlocked
+      ? m.isCurrent
+        ? theme.color.primaryDark
+        : theme.color.textFaint
+      : theme.color.textFaint;
 
   const content = (
     <>
       <span style={{ color: iconColor, fontSize: 14, width: 18, textAlign: "center" }}>{icon}</span>
-      <span style={{ fontSize: 14, color: m.unlocked ? "#f2f2f2" : "#9aa0a6" }}>{m.nome}</span>
+      <span style={{ fontSize: 14, color: m.unlocked ? theme.color.text : theme.color.textFaint }}>{m.nome}</span>
       {m.isCurrent && (
-        <span style={{ marginLeft: "auto", fontSize: 11, color: "#7F77DD", whiteSpace: "nowrap" }}>continuar</span>
+        <span style={{ marginLeft: "auto", fontSize: 11, color: theme.color.primaryDark, fontWeight: 700, whiteSpace: "nowrap" }}>
+          continuar
+        </span>
       )}
     </>
   );
@@ -22,11 +32,12 @@ function ModuleRow({ m }: { m: TrilhaView["phases"][number]["modules"][number] }
     display: "flex",
     alignItems: "center",
     gap: 10,
-    padding: "10px 12px",
-    borderRadius: 8,
-    background: m.isCurrent ? "#1a1830" : "transparent",
-    border: m.isCurrent ? "1px solid #7F77DD" : "1px solid transparent",
-    opacity: m.unlocked ? 1 : 0.6,
+    padding: "12px 12px",
+    borderRadius: theme.radius.md,
+    background: m.isCurrent ? theme.color.primaryLight : "transparent",
+    border: m.isCurrent ? `1px solid ${theme.color.primary}` : "1px solid transparent",
+    opacity: m.unlocked ? 1 : 0.65,
+    minHeight: 44, // área de toque confortável em mobile
   };
 
   // §10.1: módulo bloqueado continua mostrando nome/título, mas não é
@@ -46,32 +57,61 @@ function PhaseAccordionItem({ phase, defaultOpen }: { phase: TrilhaView["phases"
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div style={{ border: "1px solid #22252b", borderRadius: 10, marginBottom: 10, overflow: "hidden" }}>
+    <div
+      style={{
+        background: theme.color.surface,
+        border: `1px solid ${theme.color.border}`,
+        borderRadius: theme.radius.lg,
+        boxShadow: theme.shadow.sm,
+        marginBottom: theme.space(3),
+        overflow: "hidden",
+      }}
+    >
       <button
         onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
         style={{
           width: "100%",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          padding: "14px 14px",
-          background: "#14161a",
+          padding: "16px 16px",
+          background: "transparent",
           border: "none",
-          color: "#f2f2f2",
+          color: theme.color.text,
           textAlign: "left",
           cursor: "pointer",
+          minHeight: 52,
         }}
       >
-        <span style={{ fontSize: 15, fontWeight: 600 }}>{phase.nome}</span>
-        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 12, color: "#9aa0a6" }}>{phase.percent}%</span>
-          <span style={{ fontSize: 12, color: "#9aa0a6" }}>{open ? "▲" : "▼"}</span>
+        <span style={{ fontSize: theme.font.size.md, fontWeight: 600 }}>{phase.nome}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span
+            style={{
+              fontSize: theme.font.size.xs,
+              color: phase.percent === 100 ? theme.color.primaryDark : theme.color.textMuted,
+              fontWeight: 600,
+            }}
+          >
+            {phase.percent}%
+          </span>
+          <span style={{ fontSize: 12, color: theme.color.textFaint }}>{open ? "▲" : "▼"}</span>
         </span>
       </button>
       {open && (
-        <div style={{ padding: "6px 8px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
+        <div
+          style={{
+            padding: "4px 10px 12px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+            borderTop: `1px solid ${theme.color.border}`,
+          }}
+        >
           {phase.modules.length === 0 ? (
-            <p style={{ fontSize: 13, color: "#9aa0a6", padding: "6px 8px" }}>Nenhum módulo nesta fase ainda.</p>
+            <p style={{ fontSize: 13, color: theme.color.textMuted, padding: "10px 8px" }}>
+              Nenhum módulo nesta fase ainda.
+            </p>
           ) : (
             phase.modules.map((m) => <ModuleRow key={m.id} m={m} />)
           )}
@@ -84,29 +124,34 @@ function PhaseAccordionItem({ phase, defaultOpen }: { phase: TrilhaView["phases"
 export function TrilhaAccordion({ trilha, nome }: { trilha: TrilhaView; nome: string }) {
   return (
     <div>
-      <p style={{ color: "#9aa0a6", fontSize: 13, marginBottom: 16 }}>Olá, {nome}</p>
+      <h1 style={{ fontSize: theme.font.size.xl, marginTop: 0, marginBottom: 2, color: theme.color.text }}>
+        Minha Trilha
+      </h1>
+      <p style={{ color: theme.color.textMuted, fontSize: theme.font.size.sm, marginBottom: theme.space(5) }}>
+        Olá, {nome}
+      </p>
 
-      <div style={{ border: "1px solid #22252b", borderRadius: 10, padding: "14px 16px", marginBottom: 18 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-          <span style={{ fontSize: 13, color: "#9aa0a6" }}>Progresso geral</span>
-          <span style={{ fontSize: 13 }}>
+      <div
+        style={{
+          background: theme.color.surface,
+          border: `1px solid ${theme.color.border}`,
+          borderRadius: theme.radius.lg,
+          boxShadow: theme.shadow.sm,
+          padding: theme.space(4),
+          marginBottom: theme.space(5),
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+          <span style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted }}>Progresso geral</span>
+          <span style={{ fontSize: theme.font.size.sm, color: theme.color.text, fontWeight: 600 }}>
             {trilha.overallCompleted}/{trilha.overallTotal} módulos
           </span>
         </div>
-        <div style={{ height: 6, borderRadius: 999, background: "#22252b", overflow: "hidden" }}>
-          <div
-            style={{
-              height: "100%",
-              width: `${trilha.overallPercent}%`,
-              background: "#4ECDC4",
-              transition: "width 0.3s",
-            }}
-          />
-        </div>
+        <ProgressBar percent={trilha.overallPercent} height={8} />
       </div>
 
       {trilha.phases.length === 0 ? (
-        <p style={{ fontSize: 14, color: "#9aa0a6" }}>
+        <p style={{ fontSize: 14, color: theme.color.textMuted }}>
           Nenhuma fase ativa encontrada para sua trilha ainda. Fale com o gestor.
         </p>
       ) : (

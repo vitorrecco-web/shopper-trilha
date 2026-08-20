@@ -1,8 +1,11 @@
 import { redirect, notFound } from "next/navigation";
-import Link from "next/link";
 import { getCurrentSession } from "@/lib/auth/getSession";
 import { getUserById } from "@/lib/repositories/usersRepository";
 import { getModuleAccessInfo } from "@/lib/services/moduleAccessService";
+import { theme } from "@/lib/ui/theme";
+import { Header } from "@/components/ui/Header";
+import { PageShell, Container } from "@/components/ui/Container";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { ModuloClient } from "./ModuloClient";
 
 /**
@@ -23,28 +26,31 @@ export default async function ModuloPage({ params }: { params: { id: string } })
   if (!access.unlocked) redirect("/app");
 
   return (
-    <main style={{ padding: "16px 16px 40px", maxWidth: 640, margin: "0 auto" }}>
-      <p style={{ fontSize: 13, marginBottom: 12 }}>
-        <Link href="/app" style={{ color: "#9aa0a6" }}>
-          ← Minha Trilha
-        </Link>
-      </p>
-      <p style={{ fontSize: 12, color: "#9aa0a6", marginBottom: 2 }}>{access.phaseNome}</p>
-      <h1 style={{ fontSize: 19, marginTop: 0, marginBottom: 16 }}>{access.module.nome}</h1>
+    <PageShell>
+      <Header homeHref="/app" />
+      <Container maxWidth={680}>
+        <Breadcrumb items={[{ label: "Minha Trilha", href: "/app" }, { label: access.module.nome }]} />
+        <p style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint, marginBottom: 2 }}>
+          {access.phaseNome}
+        </p>
+        <h1 style={{ fontSize: theme.font.size.xl, marginTop: 0, marginBottom: theme.space(4), color: theme.color.text }}>
+          {access.module.nome}
+        </h1>
 
-      <ModuloClient
-        moduleId={access.module.id}
-        materialType={access.module.material_type}
-        hasQuestions={access.module.has_questions}
-        videoExternalId={access.module.video_external_id}
-        videoTitulo={access.module.video_titulo}
-        initialMaterialAccessed={access.materialAccessed}
-        initialVideoWatchedPercent={access.videoWatchedPercent}
-        initialCompleted={access.completed}
-        initialBestScore={access.bestScore}
-        nextModuleId={access.nextModuleId}
-        nextModuleNome={access.nextModuleNome}
-      />
-    </main>
+        <ModuloClient
+          moduleId={access.module.id}
+          materialType={access.module.material_type}
+          hasQuestions={access.module.has_questions}
+          videoExternalId={access.module.video_external_id}
+          videoTitulo={access.module.video_titulo}
+          initialMaterialAccessed={access.materialAccessed}
+          initialVideoWatchedPercent={access.videoWatchedPercent}
+          initialCompleted={access.completed}
+          initialBestScore={access.bestScore}
+          nextModuleId={access.nextModuleId}
+          nextModuleNome={access.nextModuleNome}
+        />
+      </Container>
+    </PageShell>
   );
 }

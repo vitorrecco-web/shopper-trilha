@@ -14,10 +14,42 @@ body {
     Helvetica,
     Arial,
     sans-serif;
-  background: #0f1115;
-  color: #f2f2f2;
+  background: #f7f8f7;
+  color: #1b1f1d;
 }
 
 a {
   color: inherit;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* Acessibilidade: foco sempre visível, com a cor da marca. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #1fa97a;
+  outline-offset: 2px;
+}
+
+.clickable-card:hover {
+  border-color: #1fa97a !important;
+  box-shadow: 0 4px 14px rgba(15, 23, 20, 0.1);
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: 15px;
+}
+
+/* Tabelas com scroll horizontal em telas pequenas, sem quebrar layout. */
+.table-scroll {
+  overflow-x: auto;
 }

@@ -3,7 +3,8 @@ import { getCurrentSession } from "@/lib/auth/getSession";
 import { getUserById } from "@/lib/repositories/usersRepository";
 import { getTrilhaViewForUser } from "@/lib/services/trilhaViewService";
 import { ensureFirstModuleUnlocked } from "@/lib/services/progressionService";
-import { LogoutButton } from "@/components/LogoutButton";
+import { Header } from "@/components/ui/Header";
+import { PageShell, Container } from "@/components/ui/Container";
 import { TrilhaAccordion } from "./TrilhaAccordion";
 
 export default async function AppHomePage() {
@@ -21,20 +22,11 @@ export default async function AppHomePage() {
   const trilha = await getTrilhaViewForUser(user.id, user.track_id);
 
   return (
-    <main style={{ padding: "16px 16px 40px", maxWidth: 560, margin: "0 auto" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 16,
-        }}
-      >
-        <h1 style={{ fontSize: 19, margin: 0 }}>Minha Trilha</h1>
-        <LogoutButton />
-      </div>
-
-      <TrilhaAccordion trilha={trilha} nome={user.nome_completo} />
-    </main>
+    <PageShell>
+      <Header homeHref="/app" />
+      <Container maxWidth={560}>
+        <TrilhaAccordion trilha={trilha} nome={user.nome_completo} />
+      </Container>
+    </PageShell>
   );
 }

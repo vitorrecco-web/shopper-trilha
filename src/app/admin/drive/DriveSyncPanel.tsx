@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { theme } from "@/lib/ui/theme";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 
 /** Tipos da estrutura lida do Drive — GET /api/admin/drive/preview (Fase 4, inalterada). */
 interface MappedModule {
@@ -61,12 +64,12 @@ const changeTypeLabel: Record<ChangeItem["change_type"], string> = {
   updated: "Atualizado",
 };
 
-const changeTypeColor: Record<ChangeItem["change_type"], string> = {
-  added: "#4ECDC4",
-  removed: "#ff8a8a",
-  renamed: "#e0b34d",
-  reordered: "#7F77DD",
-  updated: "#9aa0a6",
+const changeTypeTone: Record<ChangeItem["change_type"], "primary" | "danger" | "warning" | "neutral"> = {
+  added: "primary",
+  removed: "danger",
+  renamed: "warning",
+  reordered: "neutral",
+  updated: "neutral",
 };
 
 function formatDate(iso: string | null | undefined): string {
@@ -74,47 +77,26 @@ function formatDate(iso: string | null | undefined): string {
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
-const primaryBtn: React.CSSProperties = {
-  padding: "10px 16px",
-  borderRadius: 8,
-  border: "none",
-  background: "#4ECDC4",
-  color: "#0f1115",
-  fontWeight: 600,
-  fontSize: 14,
-  cursor: "pointer",
-};
-
-const secondaryBtn: React.CSSProperties = {
-  padding: "10px 16px",
-  borderRadius: 8,
-  border: "1px solid #2a2d34",
-  background: "transparent",
-  color: "#f2f2f2",
-  fontSize: 14,
-  cursor: "pointer",
-};
-
 const boxStyle: React.CSSProperties = {
-  border: "1px solid #22252b",
-  borderRadius: 10,
-  padding: 16,
-  marginBottom: 12,
+  background: theme.color.surface,
+  border: `1px solid ${theme.color.border}`,
+  borderRadius: theme.radius.lg,
+  boxShadow: theme.shadow.sm,
+  padding: theme.space(4),
+  marginBottom: theme.space(3),
 };
 
 function ModuleRow({ m }: { m: MappedModule }) {
   const hasMaterial = m.material_type === "youtube" ? Boolean(m.video_drive_id) : Boolean(m.pdf_nome);
   return (
-    <div style={{ fontSize: 13, padding: "4px 0", display: "flex", gap: 8, alignItems: "baseline" }}>
-      <span style={{ color: "#9aa0a6", minWidth: 20 }}>{m.ordem}.</span>
-      <span>{m.nome}</span>
-      {m.material_type === "youtube" ? (
-        <span style={{ color: "#4ECDC4", fontSize: 11 }}>YouTube</span>
-      ) : (
-        <span style={{ color: "#9aa0a6", fontSize: 11 }}>PDF</span>
-      )}
-      {!hasMaterial && <span style={{ color: "#ff8a8a", fontSize: 11 }}>sem material</span>}
-      {m.has_questions && <span style={{ color: "#4ECDC4", fontSize: 11 }}>com perguntas</span>}
+    <div style={{ fontSize: 13, padding: "4px 0", display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+      <span style={{ color: theme.color.textFaint, minWidth: 20 }}>{m.ordem}.</span>
+      <span style={{ color: theme.color.text }}>{m.nome}</span>
+      <Badge tone={m.material_type === "youtube" ? "primary" : "neutral"}>
+        {m.material_type === "youtube" ? "YouTube" : "PDF"}
+      </Badge>
+      {!hasMaterial && <Badge tone="danger">sem material</Badge>}
+      {m.has_questions && <Badge tone="primary">com perguntas</Badge>}
     </div>
   );
 }
@@ -184,23 +166,23 @@ export function DriveSyncPanel() {
   return (
     <div>
       {!hasAnalysis && !confirmResult && (
-        <button onClick={handleAnalyze} disabled={analyzing} style={primaryBtn}>
+        <Button onClick={handleAnalyze} disabled={analyzing}>
           {analyzing ? "Analisando..." : "Analisar alterações"}
-        </button>
+        </Button>
       )}
 
       {connectionError && (
-        <p role="alert" style={{ color: "#ff6b6b", fontSize: 13 }}>
+        <p role="alert" style={{ color: theme.color.danger, fontSize: theme.font.size.sm }}>
           {connectionError}
         </p>
       )}
       {structure && !structure.ok && (
-        <p role="alert" style={{ color: "#ff6b6b", fontSize: 13 }}>
+        <p role="alert" style={{ color: theme.color.danger, fontSize: theme.font.size.sm }}>
           {structure.error}
         </p>
       )}
       {syncPreview && !syncPreview.ok && (
-        <p role="alert" style={{ color: "#ff6b6b", fontSize: 13 }}>
+        <p role="alert" style={{ color: theme.color.danger, fontSize: theme.font.size.sm }}>
           {syncPreview.error}
         </p>
       )}
@@ -208,16 +190,16 @@ export function DriveSyncPanel() {
       {/* Estrutura lida do Drive agora (visualização preservada) */}
       {structure?.ok && (
         <>
-          <p style={{ fontSize: 12, color: "#9aa0a6", marginBottom: 8, marginTop: 4 }}>
+          <p style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint, marginBottom: 8, marginTop: 4 }}>
             Estrutura lida do Drive agora:
           </p>
           {structure.phases?.map((phase) => (
             <div key={phase.drive_folder_id} style={boxStyle}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                <b style={{ fontSize: 14 }}>
+                <b style={{ fontSize: theme.font.size.base, color: theme.color.text }}>
                   Fase {phase.ordem} — {phase.nome}
                 </b>
-                <span style={{ fontSize: 11, color: "#9aa0a6" }}>
+                <span style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint }}>
                   {phase.phase_type === "common" ? "comum" : "por trilha"}
                 </span>
               </div>
@@ -226,7 +208,9 @@ export function DriveSyncPanel() {
                 ? phase.modules.map((m) => <ModuleRow key={m.drive_folder_id} m={m} />)
                 : phase.tracks.map((t) => (
                     <div key={t.drive_folder_id} style={{ marginBottom: 8, marginLeft: 8 }}>
-                      <div style={{ fontSize: 13, color: "#4ECDC4", marginBottom: 2 }}>{t.nome}</div>
+                      <div style={{ fontSize: 13, color: theme.color.primaryDark, fontWeight: 600, marginBottom: 2 }}>
+                        {t.nome}
+                      </div>
                       <div style={{ marginLeft: 12 }}>
                         {t.modules.map((m) => (
                           <ModuleRow key={m.drive_folder_id} m={m} />
@@ -242,35 +226,25 @@ export function DriveSyncPanel() {
       {/* Diff contra o banco + avisos + ação de confirmar/cancelar */}
       {syncPreview?.ok && (
         <>
-          <p style={{ fontSize: 12, color: "#9aa0a6", marginBottom: 16 }}>
+          <p style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint, marginBottom: theme.space(4) }}>
             Última sincronização: {syncPreview.lastSync ? formatDate(syncPreview.lastSync.completedAt) : "nunca"}
           </p>
 
           <div style={boxStyle}>
-            <b style={{ fontSize: 14 }}>Mudanças detectadas ({changes.length})</b>
+            <b style={{ fontSize: theme.font.size.base, color: theme.color.text }}>
+              Mudanças detectadas ({changes.length})
+            </b>
             {changes.length > 0 ? (
-              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
                 {changes.map((c, i) => (
                   <div key={i} style={{ fontSize: 13, display: "flex", gap: 8, alignItems: "baseline" }}>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        color: changeTypeColor[c.change_type],
-                        border: `1px solid ${changeTypeColor[c.change_type]}`,
-                        borderRadius: 999,
-                        padding: "1px 8px",
-                        minWidth: 72,
-                        textAlign: "center",
-                      }}
-                    >
-                      {changeTypeLabel[c.change_type]}
-                    </span>
-                    <span>{c.label}</span>
+                    <Badge tone={changeTypeTone[c.change_type]}>{changeTypeLabel[c.change_type]}</Badge>
+                    <span style={{ color: theme.color.text }}>{c.label}</span>
                   </div>
                 ))}
               </div>
             ) : (
-              <p style={{ fontSize: 13, color: "#9aa0a6", marginTop: 8 }}>
+              <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, marginTop: 8 }}>
                 Nenhuma mudança — o banco já reflete o Drive.
               </p>
             )}
@@ -279,10 +253,10 @@ export function DriveSyncPanel() {
           {/* Avisos preservados: módulo sem PDF, perguntas.json inválido,
               pasta fora do padrão, colisão de ordem, etc — vindos do
               mesmo /api/admin/sync/preview de antes. */}
-          <div style={{ ...boxStyle, marginBottom: 20 }}>
-            <b style={{ fontSize: 14 }}>Avisos ({warnings.length})</b>
+          <div style={{ ...boxStyle, marginBottom: theme.space(5) }}>
+            <b style={{ fontSize: theme.font.size.base, color: theme.color.text }}>Avisos ({warnings.length})</b>
             {warnings.length > 0 ? (
-              <ul style={{ fontSize: 12.5, color: "#e0b34d", marginTop: 8, paddingLeft: 18 }}>
+              <ul style={{ fontSize: 12.5, color: theme.color.warning, marginTop: 8, paddingLeft: 18 }}>
                 {warnings.map((w, i) => (
                   <li key={i} style={{ marginBottom: 4 }}>
                     {w}
@@ -290,17 +264,17 @@ export function DriveSyncPanel() {
                 ))}
               </ul>
             ) : (
-              <p style={{ fontSize: 13, color: "#9aa0a6", marginTop: 8 }}>Nenhum aviso.</p>
+              <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, marginTop: 8 }}>Nenhum aviso.</p>
             )}
           </div>
 
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={handleConfirm} disabled={confirming || changes.length === 0} style={primaryBtn}>
+          <div style={{ display: "flex", gap: theme.space(2) }}>
+            <Button onClick={handleConfirm} disabled={confirming || changes.length === 0}>
               {confirming ? "Aplicando..." : "Confirmar e sincronizar"}
-            </button>
-            <button onClick={handleCancel} disabled={confirming} style={secondaryBtn}>
+            </Button>
+            <Button variant="secondary" onClick={handleCancel} disabled={confirming}>
               Cancelar
-            </button>
+            </Button>
           </div>
         </>
       )}
@@ -308,17 +282,19 @@ export function DriveSyncPanel() {
       {confirmResult && (
         <div
           style={{
-            border: `1px solid ${confirmResult.ok ? "#0f3d33" : "#3d1f1f"}`,
-            background: confirmResult.ok ? "#0f1a17" : "#1a1212",
-            borderRadius: 10,
-            padding: 16,
-            marginTop: 12,
+            border: `1px solid ${confirmResult.ok ? theme.color.primary : theme.color.danger}`,
+            background: confirmResult.ok ? theme.color.primaryLight : theme.color.dangerBg,
+            borderRadius: theme.radius.lg,
+            padding: theme.space(4),
+            marginTop: theme.space(3),
           }}
         >
           {confirmResult.ok ? (
             <>
-              <b style={{ fontSize: 14, color: "#4ECDC4" }}>Sincronização aplicada com sucesso.</b>
-              <p style={{ fontSize: 13, marginTop: 8 }}>
+              <b style={{ fontSize: theme.font.size.base, color: theme.color.primaryDark }}>
+                Sincronização aplicada com sucesso.
+              </b>
+              <p style={{ fontSize: theme.font.size.sm, marginTop: 8, color: theme.color.text }}>
                 {Object.entries(confirmResult.counts ?? {})
                   .map(([k, v]) => `${k}: ${v}`)
                   .join(" · ")}
@@ -326,20 +302,26 @@ export function DriveSyncPanel() {
             </>
           ) : (
             <>
-              <b style={{ fontSize: 14, color: "#ff8a8a" }}>Sincronização com falhas.</b>
-              <p style={{ fontSize: 13, marginTop: 8 }}>{confirmResult.error}</p>
+              <b style={{ fontSize: theme.font.size.base, color: theme.color.danger }}>Sincronização com falhas.</b>
+              <p style={{ fontSize: theme.font.size.sm, marginTop: 8, color: theme.color.text }}>
+                {confirmResult.error}
+              </p>
             </>
           )}
           {confirmResult.failures && confirmResult.failures.length > 0 && (
-            <ul style={{ fontSize: 12.5, color: "#ff8a8a", marginTop: 8, paddingLeft: 18 }}>
+            <ul style={{ fontSize: 12.5, color: theme.color.danger, marginTop: 8, paddingLeft: 18 }}>
               {confirmResult.failures.map((f, i) => (
                 <li key={i}>{f}</li>
               ))}
             </ul>
           )}
-          <button onClick={() => setConfirmResult(null)} style={{ ...secondaryBtn, marginTop: 12, fontSize: 13 }}>
+          <Button
+            variant="secondary"
+            onClick={() => setConfirmResult(null)}
+            style={{ marginTop: theme.space(3), fontSize: theme.font.size.sm }}
+          >
             Analisar de novo
-          </button>
+          </Button>
         </div>
       )}
     </div>

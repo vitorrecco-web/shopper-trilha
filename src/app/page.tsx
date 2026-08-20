@@ -1,21 +1,13 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getCurrentSession } from "@/lib/auth/getSession";
 
-export default function HomePage() {
-  return (
-    <main style={{ padding: 24, maxWidth: 480, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 22 }}>Shopper Trilha</h1>
-      <p style={{ color: "#9aa0a6", fontSize: 14, lineHeight: 1.5 }}>
-        Fase 2 concluída: autenticação própria com sessão via cookie
-        httpOnly. Minha Trilha, quiz e sincronização com o Drive ainda não
-        foram implementados — ver <code>EXECUTION_PLAN.md</code>.
-      </p>
-      <p style={{ fontSize: 14 }}>
-        <Link href="/login">Ir para o login →</Link>
-      </p>
-      <p style={{ color: "#9aa0a6", fontSize: 14, lineHeight: 1.5 }}>
-        Verifique a conexão com o banco em{" "}
-        <a href="/api/health">/api/health</a>.
-      </p>
-    </main>
-  );
+/**
+ * "/" é só roteamento — nunca renderiza nada para o usuário (REDESIGN
+ * V1, item 2). Os destinos (/login, /app, /admin) já existiam antes;
+ * isto só centraliza a decisão em vez de mostrar uma página técnica.
+ */
+export default async function HomePage() {
+  const session = await getCurrentSession();
+  if (!session) redirect("/login");
+  redirect(session.role === "admin" ? "/admin" : "/app");
 }

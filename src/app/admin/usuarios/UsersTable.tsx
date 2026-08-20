@@ -5,6 +5,8 @@ import Link from "next/link";
 import type { UserProgress } from "@/lib/services/userProgress";
 import type { TrackStatus } from "@/lib/services/trackStatus";
 import { trackStatusLabel } from "@/lib/services/trackStatus";
+import { theme } from "@/lib/ui/theme";
+import { Badge } from "@/components/ui/Badge";
 
 export interface UserRow {
   id: string;
@@ -31,11 +33,11 @@ function formatProgress(p: UserProgress): string {
   return `${p.percent}% (${p.completedModules}/${p.totalModules})`;
 }
 
-const trackStatusColor: Record<TrackStatus, { bg: string; fg: string }> = {
-  sem_modulos: { bg: "#22252b", fg: "#9aa0a6" },
-  nao_iniciado: { bg: "#2a2417", fg: "#e0b34d" },
-  em_andamento: { bg: "#141a30", fg: "#7F77DD" },
-  concluida: { bg: "#0f3d33", fg: "#4ECDC4" },
+const trackStatusTone: Record<TrackStatus, "neutral" | "warning" | "primary"> = {
+  sem_modulos: "neutral",
+  nao_iniciado: "warning",
+  em_andamento: "neutral",
+  concluida: "primary",
 };
 
 /**
@@ -90,25 +92,25 @@ export function UsersTable({ initialUsers, tracks }: { initialUsers: UserRow[]; 
     }
   }
 
-  const selectStyle: React.CSSProperties = {
-    padding: "8px 10px",
-    borderRadius: 8,
-    border: "1px solid #2a2d34",
-    background: "#181a1f",
-    color: "#f2f2f2",
-    fontSize: 13,
+  const fieldStyle: React.CSSProperties = {
+    padding: "9px 12px",
+    borderRadius: theme.radius.md,
+    border: `1px solid ${theme.color.border}`,
+    background: theme.color.surface,
+    color: theme.color.text,
+    fontSize: theme.font.size.sm,
   };
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: theme.space(2), flexWrap: "wrap", marginBottom: theme.space(4) }}>
         <input
           placeholder="Buscar por nome, login ou matrícula..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ ...selectStyle, width: "100%", maxWidth: 320 }}
+          style={{ ...fieldStyle, width: "100%", maxWidth: 320 }}
         />
-        <select value={trackFilter} onChange={(e) => setTrackFilter(e.target.value)} style={selectStyle}>
+        <select value={trackFilter} onChange={(e) => setTrackFilter(e.target.value)} style={fieldStyle}>
           <option value="">Todas as trilhas</option>
           {tracks.map((t) => (
             <option key={t.id} value={t.id}>
@@ -116,7 +118,7 @@ export function UsersTable({ initialUsers, tracks }: { initialUsers: UserRow[]; 
             </option>
           ))}
         </select>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={selectStyle}>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={fieldStyle}>
           <option value="">Todos os status</option>
           <option value="active">Ativo</option>
           <option value="inactive">Inativo</option>
@@ -124,15 +126,33 @@ export function UsersTable({ initialUsers, tracks }: { initialUsers: UserRow[]; 
       </div>
 
       {error && (
-        <p role="alert" style={{ color: "#ff6b6b", fontSize: 13, marginBottom: 8 }}>
+        <p
+          role="alert"
+          style={{
+            color: theme.color.danger,
+            background: theme.color.dangerBg,
+            borderRadius: theme.radius.sm,
+            padding: "8px 12px",
+            fontSize: theme.font.size.sm,
+            marginBottom: theme.space(3),
+          }}
+        >
           {error}
         </p>
       )}
 
-      <div style={{ overflowX: "auto", border: "1px solid #22252b", borderRadius: 10 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 820 }}>
+      <div
+        className="table-scroll"
+        style={{
+          border: `1px solid ${theme.color.border}`,
+          borderRadius: theme.radius.lg,
+          background: theme.color.surface,
+          boxShadow: theme.shadow.sm,
+        }}
+      >
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: theme.font.size.sm, minWidth: 820 }}>
           <thead>
-            <tr style={{ background: "#181a1f", textAlign: "left" }}>
+            <tr style={{ background: theme.color.bg, textAlign: "left" }}>
               {[
                 "Nome",
                 "Matrícula",
@@ -145,78 +165,61 @@ export function UsersTable({ initialUsers, tracks }: { initialUsers: UserRow[]; 
                 "Último acesso",
                 "",
               ].map((h) => (
-                <th key={h} style={{ padding: "10px 12px", color: "#9aa0a6", fontWeight: 500 }}>
+                <th
+                  key={h}
+                  style={{ padding: "12px 14px", color: theme.color.textMuted, fontWeight: 600, fontSize: theme.font.size.xs }}
+                >
                   {h}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {filtered.map((u) => {
-              const ts = trackStatusColor[u.trackStatus];
-              return (
-                <tr key={u.id} style={{ borderTop: "1px solid #22252b" }}>
-                  <td style={{ padding: "10px 12px" }}>
-                    <Link href={`/admin/usuarios/${u.id}`} style={{ color: "#4ECDC4", textDecoration: "none" }}>
-                      {u.nome_completo}
-                    </Link>
-                  </td>
-                  <td style={{ padding: "10px 12px", color: "#9aa0a6" }}>{u.matricula ?? "—"}</td>
-                  <td style={{ padding: "10px 12px" }}>{u.track_nome}</td>
-                  <td style={{ padding: "10px 12px", color: "#9aa0a6" }}>{u.cd ?? "—"}</td>
-                  <td style={{ padding: "10px 12px", color: "#9aa0a6" }}>{u.turno ?? "—"}</td>
-                  <td style={{ padding: "10px 12px" }}>{formatProgress(u.progress)}</td>
-                  <td style={{ padding: "10px 12px" }}>
-                    <span
-                      style={{
-                        padding: "2px 8px",
-                        borderRadius: 999,
-                        fontSize: 12,
-                        background: ts.bg,
-                        color: ts.fg,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {trackStatusLabel[u.trackStatus]}
-                    </span>
-                  </td>
-                  <td style={{ padding: "10px 12px" }}>
-                    <span
-                      style={{
-                        padding: "2px 8px",
-                        borderRadius: 999,
-                        fontSize: 12,
-                        background: u.status === "active" ? "#0f3d33" : "#3d1f1f",
-                        color: u.status === "active" ? "#4ECDC4" : "#ff8a8a",
-                      }}
-                    >
-                      {u.status === "active" ? "Ativo" : "Inativo"}
-                    </span>
-                  </td>
-                  <td style={{ padding: "10px 12px", color: "#9aa0a6" }}>{formatDate(u.last_login_at)}</td>
-                  <td style={{ padding: "10px 12px" }}>
-                    <button
-                      onClick={() => toggleStatus(u)}
-                      disabled={pendingId === u.id}
-                      style={{
-                        padding: "6px 10px",
-                        borderRadius: 6,
-                        border: "1px solid #2a2d34",
-                        background: "transparent",
-                        color: "#f2f2f2",
-                        fontSize: 12,
-                        cursor: "pointer",
-                      }}
-                    >
-                      {u.status === "active" ? "Inativar" : "Ativar"}
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
+            {filtered.map((u) => (
+              <tr key={u.id} style={{ borderTop: `1px solid ${theme.color.border}` }}>
+                <td style={{ padding: "12px 14px" }}>
+                  <Link href={`/admin/usuarios/${u.id}`} style={{ color: theme.color.primaryDark, textDecoration: "none", fontWeight: 600 }}>
+                    {u.nome_completo}
+                  </Link>
+                </td>
+                <td style={{ padding: "12px 14px", color: theme.color.textMuted }}>{u.matricula ?? "—"}</td>
+                <td style={{ padding: "12px 14px" }}>{u.track_nome}</td>
+                <td style={{ padding: "12px 14px", color: theme.color.textMuted }}>{u.cd ?? "—"}</td>
+                <td style={{ padding: "12px 14px", color: theme.color.textMuted }}>{u.turno ?? "—"}</td>
+                <td style={{ padding: "12px 14px" }}>{formatProgress(u.progress)}</td>
+                <td style={{ padding: "12px 14px" }}>
+                  <Badge tone={trackStatusTone[u.trackStatus]}>{trackStatusLabel[u.trackStatus]}</Badge>
+                </td>
+                <td style={{ padding: "12px 14px" }}>
+                  <Badge tone={u.status === "active" ? "primary" : "danger"}>
+                    {u.status === "active" ? "Ativo" : "Inativo"}
+                  </Badge>
+                </td>
+                <td style={{ padding: "12px 14px", color: theme.color.textMuted }}>{formatDate(u.last_login_at)}</td>
+                <td style={{ padding: "12px 14px" }}>
+                  <button
+                    onClick={() => toggleStatus(u)}
+                    disabled={pendingId === u.id}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: theme.radius.sm,
+                      border: `1px solid ${theme.color.border}`,
+                      background: theme.color.surface,
+                      color: theme.color.text,
+                      fontSize: theme.font.size.xs,
+                      fontWeight: 600,
+                      cursor: pendingId === u.id ? "default" : "pointer",
+                      opacity: pendingId === u.id ? 0.6 : 1,
+                    }}
+                  >
+                    {u.status === "active" ? "Inativar" : "Ativar"}
+                  </button>
+                </td>
+              </tr>
+            ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={10} style={{ padding: 16, textAlign: "center", color: "#9aa0a6" }}>
+                <td colSpan={10} style={{ padding: 20, textAlign: "center", color: theme.color.textFaint }}>
                   Nenhum usuário encontrado.
                 </td>
               </tr>

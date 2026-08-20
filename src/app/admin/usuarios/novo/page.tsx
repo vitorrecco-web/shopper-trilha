@@ -1,7 +1,10 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { getCurrentSession } from "@/lib/auth/getSession";
 import { listActiveTracks } from "@/lib/repositories/tracksRepository";
+import { theme } from "@/lib/ui/theme";
+import { Header } from "@/components/ui/Header";
+import { PageShell, Container } from "@/components/ui/Container";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { NewUserForm } from "./NewUserForm";
 
 export default async function NovoUsuarioPage() {
@@ -12,33 +15,36 @@ export default async function NovoUsuarioPage() {
   const tracks = await listActiveTracks();
 
   return (
-    <main style={{ padding: 24, maxWidth: 480, margin: "0 auto" }}>
-      <p style={{ fontSize: 13, marginBottom: 16 }}>
-        <Link href="/admin/usuarios" style={{ color: "#9aa0a6" }}>
-          ← Usuários
-        </Link>
-      </p>
-      <h1 style={{ fontSize: 20, marginBottom: 16 }}>Novo usuário</h1>
+    <PageShell>
+      <Header nome={session.nome} context="Painel do Gestor" homeHref="/admin" />
+      <Container maxWidth={520}>
+        <Breadcrumb
+          items={[
+            { label: "Painel do Gestor", href: "/admin" },
+            { label: "Usuários", href: "/admin/usuarios" },
+            { label: "Novo usuário" },
+          ]}
+        />
+        <h1 style={{ fontSize: theme.font.size.xxl, marginTop: 0, marginBottom: theme.space(4) }}>Novo usuário</h1>
 
-      {tracks.length === 0 && (
-        <p
-          style={{
-            fontSize: 13,
-            color: "#e0b34d",
-            background: "#2a2417",
-            border: "1px solid #4a3f24",
-            borderRadius: 8,
-            padding: 12,
-            marginBottom: 16,
-          }}
-        >
-          Nenhuma trilha ativa cadastrada ainda — isso é populado pela sincronização com o
-          Drive (Fase 4/5 do EXECUTION_PLAN.md). Sem uma trilha, não é possível criar um usuário
-          aqui.
-        </p>
-      )}
+        {tracks.length === 0 && (
+          <p
+            style={{
+              fontSize: theme.font.size.sm,
+              color: theme.color.warning,
+              background: theme.color.warningBg,
+              borderRadius: theme.radius.md,
+              padding: theme.space(3),
+              marginBottom: theme.space(4),
+            }}
+          >
+            Nenhuma trilha ativa cadastrada ainda — isso é populado pela sincronização com o
+            Drive. Sem uma trilha, não é possível criar um usuário aqui.
+          </p>
+        )}
 
-      <NewUserForm tracks={tracks} />
-    </main>
+        <NewUserForm tracks={tracks} />
+      </Container>
+    </PageShell>
   );
 }
