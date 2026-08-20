@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { theme } from "@/lib/ui/theme";
 import { Button, buttonStyle } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { PdfPageViewer } from "./PdfPageViewer";
+import { FocusOverlay, ExpandButton } from "@/components/ui/FocusOverlay";
+import { PdfPageViewer, type PdfPageViewerHandle } from "./PdfPageViewer";
 import { YoutubePlayer } from "./YoutubePlayer";
 
 interface PublicAlternativa {
@@ -140,6 +141,11 @@ function PdfMaterialSection({
   const [completedNoQuiz, setCompletedNoQuiz] = useState(initialCompleted && !hasQuestions);
   const refreshedRef = useRef(false);
 
+  const pdfRef = useRef<PdfPageViewerHandle>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [pageInfo, setPageInfo] = useState({ current: 1, total: 0 });
+  const touchStartXRef = useRef<number | null>(null);
+
   // §9: o próprio carregamento do visualizador (a requisição real ao
   // endpoint do PDF) é o "primeiro acesso" — o servidor já grava
   // material_accessed nesse momento. Aqui só refletimos na tela.
@@ -154,10 +160,90 @@ function PdfMaterialSection({
     }
   }
 
+  // O container do PdfPageViewer muda de tamanho ao expandir/recolher,
+  // mas isso não dispara o 'resize' da janela — força um novo render da
+  // página atual no tamanho novo depois que o layout assenta.
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => pdfRef.current?.refit());
+    return () => cancelAnimationFrame(raf);
+  }, [expanded]);
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartXRef.current = e.touches[0]?.clientX ?? null;
+  }
+  function handleTouchEnd(e: React.TouchEvent) {
+    const startX = touchStartXRef.current;
+    touchStartXRef.current = null;
+    if (startX === null) return;
+    const endX = e.changedTouches[0]?.clientX ?? startX;
+    const delta = endX - startX;
+    if (Math.abs(delta) < 40) return; // gesto pequeno demais — provavelmente não é intencional
+    if (delta < 0) pdfRef.current?.goNext();
+    else pdfRef.current?.goPrev();
+  }
+
+  const isFirst = pageInfo.current <= 1;
+  const isLast = pageInfo.total > 0 && pageInfo.current >= pageInfo.total;
+
+  const arrowBaseStyle: React.CSSProperties = {
+    position: "absolute",
+    top: "50%",
+    transform: "translateY(-50%)",
+    width: 48,
+    height: 48,
+    borderRadius: theme.radius.pill,
+    border: "none",
+    background: "rgba(20, 22, 20, 0.35)",
+    color: "#fff",
+    fontSize: 24,
+    lineHeight: 1,
+    cursor: "pointer",
+  };
+
   return (
     <div>
       <div style={{ marginBottom: 10 }}>
-        <PdfPageViewer moduleId={moduleId} onLoaded={handlePdfLoad} />
+        <FocusOverlay
+          expanded={expanded}
+          onRequestClose={() => setExpanded(false)}
+          ariaLabel="Material do módulo em tela ampliada"
+          footer={pageInfo.total > 0 ? `Página ${pageInfo.current} de ${pageInfo.total}` : null}
+          overlayControls={
+            <>
+              <button
+                onClick={() => pdfRef.current?.goPrev()}
+                disabled={isFirst}
+                aria-label="Página anterior"
+                style={{ ...arrowBaseStyle, left: 8, opacity: isFirst ? 0 : 1, pointerEvents: isFirst ? "none" : "auto" }}
+              >
+                ‹
+              </button>
+              <button
+                onClick={() => pdfRef.current?.goNext()}
+                disabled={isLast}
+                aria-label="Próxima página"
+                style={{ ...arrowBaseStyle, right: 8, opacity: isLast ? 0 : 1, pointerEvents: isLast ? "none" : "auto" }}
+              >
+                ›
+              </button>
+            </>
+          }
+        >
+          <div
+            style={{ position: "relative", width: "100%", height: expanded ? "100%" : "auto" }}
+            onTouchStart={expanded ? handleTouchStart : undefined}
+            onTouchEnd={expanded ? handleTouchEnd : undefined}
+          >
+            <PdfPageViewer
+              ref={pdfRef}
+              moduleId={moduleId}
+              onLoaded={handlePdfLoad}
+              onPageChange={(current, total) => setPageInfo({ current, total })}
+              hideControls={expanded}
+            />
+            {!expanded && <ExpandButton onClick={() => setExpanded(true)} />}
+          </div>
+        </FocusOverlay>
       </div>
       <a
         href={`/api/modulos/${moduleId}/pdf?download=1`}
@@ -231,6 +317,7 @@ function VideoMaterialSection({
   const [completedNoQuiz, setCompletedNoQuiz] = useState(initialCompleted && !hasQuestions);
   const [completing, setCompleting] = useState(false);
   const [completeError, setCompleteError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const reportingRef = useRef(false);
 
   const thresholdReached = watchedPercent >= VIDEO_WATCHED_THRESHOLD_PERCENT;
@@ -289,7 +376,20 @@ function VideoMaterialSection({
 
   return (
     <div>
-      <YoutubePlayer videoId={videoExternalId} onProgress={handleProgress} />
+      <div style={{ marginBottom: 8 }}>
+        <FocusOverlay
+          expanded={expanded}
+          onRequestClose={() => setExpanded(false)}
+          ariaLabel="Vídeo do módulo em tela ampliada"
+        >
+          <div style={{ position: "relative", width: "100%", height: expanded ? "100%" : "auto" }}>
+            <div style={expanded ? { height: "100%", display: "flex", alignItems: "center" } : undefined}>
+              <YoutubePlayer videoId={videoExternalId} onProgress={handleProgress} />
+            </div>
+            {!expanded && <ExpandButton onClick={() => setExpanded(true)} />}
+          </div>
+        </FocusOverlay>
+      </div>
       {videoTitulo && (
         <p style={{ fontSize: 13, color: theme.color.textMuted, marginTop: 8, marginBottom: 0 }}>{videoTitulo}</p>
       )}

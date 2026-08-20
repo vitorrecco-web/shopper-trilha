@@ -382,6 +382,25 @@ supabase/
     0002_service_role_grants.sql
 ```
 
+## Correção do player de YouTube no Safari/iOS + Modo de Estudo
+
+### Causa do retângulo preto no iOS
+
+Duas causas provavelmente combinadas:
+1. Faltava `playsinline: 1` em `playerVars` — o Safari/iOS trata a ausência disso de forma mais estrita que o Chrome/Android.
+2. O dimensionamento do iframe (100% de largura/altura) era aplicado só via `iframe.style` dentro do callback `onReady` da API — dependia de timing de JS. O WebKit do iOS pode montar o iframe já com os atributos originais (que colapsam para 0 sem um contexto de porcentagem bem definido) e não repaginar corretamente quando o JS muda o style depois.
+
+**Correção:** `playsinline: 1` adicionado, e o dimensionamento agora é garantido por uma classe CSS estável (`.yt-player-frame iframe`) com `!important` em `globals.css` — aplicada no instante em que o iframe entra no DOM, sem depender de nenhum callback rodar primeiro. O ajuste via `onReady` foi mantido como reforço, não como única fonte de verdade. A proporção 16:9 passou a usar `aspect-ratio` (CSS moderno) em vez do truque de `padding-top`, porque o Modo de Estudo (abaixo) às vezes dá ao player uma altura definida pelo container — `aspect-ratio` funciona corretamente nos dois casos, o truque de `padding-top` não.
+
+### Modo de Estudo (visualização ampliada)
+
+- **`src/components/ui/FocusOverlay.tsx`** (novo) — casca genérica reutilizada por PDF e vídeo. `children` é **sempre montado**, no modo normal ou ampliado — só a CSS em volta muda entre "documento normal" e "overlay fixo em tela cheia". Isso é o que preserva a página do PDF e o tempo do vídeo automaticamente ao entrar/sair: a instância do `PdfPageViewer`/`YoutubePlayer` nunca desmonta, então não existe "estado a restaurar" — ele nunca se perdeu.
+- Trava o scroll do body (`document.body.classList.add("focus-overlay-open")` + regra em `globals.css`), fecha com ESC, foca o botão de fechar ao abrir, `z-index: 1000` (acima do Header, que é `10`), `role="dialog"` + `aria-modal` + `aria-label`.
+- **PDF**: `PdfPageViewer.tsx` ganhou `forwardRef` expondo `{ goPrev, goNext, refit }` — as setas ‹ › sobrepostas do Modo de Estudo chamam essas mesmas funções, controlando a mesma instância (não duplica o leitor). `onPageChange` informa a página atual/total pro overlay mostrar "Página X de Y" e desabilitar/esconder as setas nas pontas. `hideControls` oculta os botões Anterior/Próxima internos quando o overlay já mostra os seus. Swipe horizontal simples (`touchstart`/`touchend`, limiar de 40px) complementa as setas no mobile, sem substituí-las.
+- **Vídeo**: sem controles extras — só a casca do overlay. Como o player nunca desmonta, o progresso continua sendo reportado normalmente ao `/api/modulos/[id]/video-progress` em qualquer um dos dois modos, e a regra de 90% não foi tocada.
+- Desktop: overlay ocupa até 1100px / `calc(100dvh - 24px)`, com fundo escuro atrás. Mobile: ocupa a viewport quase inteira.
+- Nenhuma API de módulo, regra de progressão, quiz, conclusão, autenticação, sincronização do Drive ou banco foi alterada — mudança é 100% de apresentação/interação no cliente.
+
 ## REDESIGN V1 — identidade visual Shopper
 
 Toda a funcionalidade da V1 foi preservada; só apresentação/navegação mudaram.

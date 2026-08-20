@@ -1,8 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { theme } from "@/lib/ui/theme";
+
+/**
+ * Handle exposto via ref — permite que o Modo de Estudo (FocusOverlay)
+ * tenha suas próprias setas ‹ › sobrepostas sem duplicar o leitor: as
+ * setas do overlay chamam estas mesmas funções, controlando a MESMA
+ * instância do visualizador (nunca desmonta ao entrar/sair do modo
+ * ampliado, o que preserva a página atual automaticamente).
+ */
+export interface PdfPageViewerHandle {
+  goPrev: () => void;
+  goNext: () => void;
+  /** Força um novo render da página atual no tamanho do container — usado depois de expandir/recolher, quando o container muda de tamanho sem disparar 'resize' da janela. */
+  refit: () => void;
+}
 
 /**
  * Visualizador próprio de PDF: mostra 1 página por vez, centralizada e
@@ -16,7 +30,17 @@ import { theme } from "@/lib/ui/theme";
  * mesmo momento em que o antigo `<iframe onLoad>` disparava: quando essa
  * busca é concluída com sucesso.
  */
-export function PdfPageViewer({ moduleId, onLoaded }: { moduleId: string; onLoaded?: () => void }) {
+export const PdfPageViewer = forwardRef<
+  PdfPageViewerHandle,
+  {
+    moduleId: string;
+    onLoaded?: () => void;
+    /** Chamado sempre que a página atual ou o total mudam — o Modo de Estudo usa isto para mostrar "Página X de Y" e habilitar/desabilitar suas próprias setas. */
+    onPageChange?: (current: number, total: number) => void;
+    /** Oculta o "Página X de Y" e os botões Anterior/Próxima internos — usado quando o Modo de Estudo já mostra sua própria navegação sobreposta, para não duplicar. */
+    hideControls?: boolean;
+  }
+>(function PdfPageViewer({ moduleId, onLoaded, onPageChange, hideControls }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
@@ -91,7 +115,17 @@ export function PdfPageViewer({ moduleId, onLoaded }: { moduleId: string; onLoad
       const page = await pdf.getPage(pageNumber);
       const containerWidth = container.clientWidth || 320;
       const baseViewport = page.getViewport({ scale: 1 });
-      const scale = containerWidth / baseViewport.width;
+
+      // No Modo de Estudo o container também tem altura definida (o
+      // overlay ocupa quase a tela toda) — usar a altura disponível
+      // como segundo limite garante "o máximo possível da tela" sem
+      // cortar a página por cima/baixo.
+      const containerHeight = container.clientHeight;
+      const scaleByWidth = containerWidth / baseViewport.width;
+      const scale =
+        containerHeight > 0
+          ? Math.min(scaleByWidth, containerHeight / baseViewport.height)
+          : scaleByWidth;
       const viewport = page.getViewport({ scale });
 
       const context = canvas.getContext("2d");
@@ -115,6 +149,10 @@ export function PdfPageViewer({ moduleId, onLoaded }: { moduleId: string; onLoad
     if (!loading && numPages > 0) renderPage(currentPage);
   }, [currentPage, loading, numPages, renderPage]);
 
+  useEffect(() => {
+    onPageChange?.(currentPage, numPages);
+  }, [currentPage, numPages, onPageChange]);
+
   // Reajusta a página à largura disponível quando a janela é redimensionada.
   useEffect(() => {
     function handleResize() {
@@ -126,6 +164,16 @@ export function PdfPageViewer({ moduleId, onLoaded }: { moduleId: string; onLoad
 
   const goPrev = useCallback(() => setCurrentPage((p) => Math.max(1, p - 1)), []);
   const goNext = useCallback(() => setCurrentPage((p) => Math.min(numPages || p, p + 1)), [numPages]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      goPrev,
+      goNext,
+      refit: () => renderPage(currentPage),
+    }),
+    [goPrev, goNext, renderPage, currentPage]
+  );
 
   // Navegação pelas setas do teclado (usa updates funcionais — sem closure velha).
   useEffect(() => {
@@ -149,7 +197,7 @@ export function PdfPageViewer({ moduleId, onLoaded }: { moduleId: string; onLoad
   const isLast = numPages > 0 && currentPage >= numPages;
 
   return (
-    <div>
+    <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
       <div
         ref={containerRef}
         style={{
@@ -160,7 +208,9 @@ export function PdfPageViewer({ moduleId, onLoaded }: { moduleId: string; onLoad
           background: "#fff",
           display: "flex",
           justifyContent: "center",
+          alignItems: "center",
           minHeight: loading ? 220 : undefined,
+          flex: "1 1 auto",
         }}
       >
         {loading ? (
@@ -172,7 +222,7 @@ export function PdfPageViewer({ moduleId, onLoaded }: { moduleId: string; onLoad
         )}
       </div>
 
-      {!loading && numPages > 0 && (
+      {!hideControls && !loading && numPages > 0 && (
         <>
           <p style={{ textAlign: "center", fontSize: 13, color: theme.color.textMuted, margin: "10px 0" }}>
             {rendering ? "Carregando página..." : `Página ${currentPage} de ${numPages}`}
@@ -217,4 +267,4 @@ export function PdfPageViewer({ moduleId, onLoaded }: { moduleId: string; onLoad
       )}
     </div>
   );
-}
+});

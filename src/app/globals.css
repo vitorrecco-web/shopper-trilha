@@ -53,3 +53,24 @@ textarea {
 .table-scroll {
   overflow-x: auto;
 }
+
+/*
+  Correção do retângulo preto no Safari/iOS ao incorporar o player do
+  YouTube (YoutubePlayer.tsx): o dimensionamento do iframe criado pela
+  IFrame Player API precisa ser garantido por CSS, aplicado no instante
+  em que o elemento entra no DOM — não pode depender só de JS rodando
+  dentro do callback onReady, que no WebKit do iOS às vezes roda tarde
+  demais e deixa o iframe com tamanho 0 renderizado antes.
+*/
+.yt-player-frame iframe {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  border: 0;
+}
+
+/* Trava o scroll do body enquanto o Modo de Estudo (FocusOverlay) está aberto. */
+body.focus-overlay-open {
+  overflow: hidden;
+}
