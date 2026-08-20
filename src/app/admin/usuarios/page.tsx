@@ -7,7 +7,7 @@ import { theme } from "@/lib/ui/theme";
 import { Header } from "@/components/ui/Header";
 import { PageShell, Container } from "@/components/ui/Container";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
-import { buttonStyle } from "@/components/ui/Button";
+import { buttonStyle } from "@/lib/ui/buttonStyle";
 import Link from "next/link";
 import { UsersTable, type UserRow } from "./UsersTable";
 
