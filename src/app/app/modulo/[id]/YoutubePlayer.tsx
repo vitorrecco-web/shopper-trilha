@@ -192,9 +192,15 @@ export function YoutubePlayer({
         width: "100%",
         aspectRatio: "16 / 9",
         maxHeight: "100%",
-        borderRadius: 10,
-        overflow: "hidden",
         background: "#000",
+        // NÃO colocar borderRadius/overflow:hidden neste elemento: é uma
+        // combinação com bug conhecido no WebKit (Safari/iOS) — vídeo
+        // com decodificação por hardware (como o de um iframe do
+        // YouTube) pode falhar em pintar visualmente (fica preto)
+        // quando o container direto tem cantos arredondados + corte de
+        // conteúdo ao mesmo tempo, mesmo com tudo funcionando por
+        // baixo. Se quiser cantos arredondados visuais, aplicar num
+        // wrapper decorativo por fora deste elemento, nunca aqui.
       }}
     >
       <iframe

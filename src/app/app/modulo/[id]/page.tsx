@@ -1,4 +1,5 @@
 import { redirect, notFound } from "next/navigation";
+import Link from "next/link";
 import { getCurrentSession } from "@/lib/auth/getSession";
 import { getUserById } from "@/lib/repositories/usersRepository";
 import { getModuleAccessInfo } from "@/lib/services/moduleAccessService";
@@ -29,6 +30,30 @@ export default async function ModuloPage({ params }: { params: { id: string } })
     <PageShell>
       <Header homeHref="/app" />
       <Container maxWidth={680}>
+        {/*
+          Botão real e visível de voltar — existe independentemente do
+          breadcrumb abaixo (que pode ficar ou ser removido no futuro
+          sem afetar a navegação). next/link real, href="/app" direto,
+          sem nenhuma lógica condicional que possa desativá-lo.
+        */}
+        <Link
+          href="/app"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: theme.font.size.base,
+            fontWeight: 700,
+            color: theme.color.primaryDark,
+            textDecoration: "none",
+            padding: "10px 4px",
+            marginBottom: theme.space(2),
+            minHeight: 44, // área de toque confortável em mobile
+          }}
+        >
+          ← Voltar para Minha Trilha
+        </Link>
+
         <Breadcrumb items={[{ label: "Minha Trilha", href: "/app" }, { label: access.module.nome }]} />
         <p style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint, marginBottom: 2 }}>
           {access.phaseNome}
