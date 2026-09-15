@@ -4,7 +4,8 @@ import { getSessionOptions, type SessionData } from "@/lib/auth/session";
 
 /**
  * Guards de rota (EXECUTION_PLAN Fase 2, item 6; estendido na Fase 3
- * para cobrir /api/admin/**, e na Fase 8 para /api/modulos/**):
+ * para cobrir /api/admin/**, na Fase 8 para /api/modulos/**, e agora
+ * para /api/assistente/** — o backend do widget de chat):
  * - /admin/**       exige role === "admin"
  * - /api/admin/**   idem — cada rota também revalida via requireAdminOrRespond,
  *                   isto aqui é a primeira camada, não a única.
@@ -12,6 +13,8 @@ import { getSessionOptions, type SessionData } from "@/lib/auth/session";
  * - /api/modulos/** idem — cada rota também revalida acesso ao módulo
  *                   específico (getModuleAccessInfo), isto aqui só
  *                   garante que existe uma sessão.
+ * - /api/assistente/** idem — qualquer usuário autenticado (admin ou
+ *                   student), a rota em si também revalida a sessão.
  * - /login          se já autenticado, redireciona para a home certa
  *
  * Middleware roda no Edge runtime — iron-session v8 é compatível.
@@ -42,7 +45,7 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  if (pathname.startsWith("/api/modulos")) {
+  if (pathname.startsWith("/api/modulos") || pathname.startsWith("/api/assistente")) {
     if (!isAuthenticated) {
       return NextResponse.json({ ok: false, error: "Não autenticado." }, { status: 401 });
     }
@@ -70,5 +73,12 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/login", "/admin/:path*", "/api/admin/:path*", "/api/modulos/:path*", "/app/:path*"],
+  matcher: [
+    "/login",
+    "/admin/:path*",
+    "/api/admin/:path*",
+    "/api/modulos/:path*",
+    "/api/assistente/:path*",
+    "/app/:path*",
+  ],
 };
