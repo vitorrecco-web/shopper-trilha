@@ -14,39 +14,11 @@ import { theme } from "@/lib/ui/theme";
  * sobrepõe o Header (topo) nem nenhuma navegação existente.
  */
 
-interface ChatSource {
-  arquivo: string;
-  caminho: string;
-  categoria: string;
-  pagina: number | null;
-}
-
 interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   text: string;
-  sources?: ChatSource[];
   error?: boolean;
-}
-
-/**
- * Chave de deduplicação de fonte: mesmo arquivo + mesma página conta
- * como uma fonte só, mesmo que tenham vindo de chunks diferentes.
- */
-function sourceKey(s: ChatSource): string {
-  return `${s.arquivo}__${s.pagina ?? ""}`;
-}
-
-function dedupeSources(sources: ChatSource[]): ChatSource[] {
-  const seen = new Set<string>();
-  const result: ChatSource[] = [];
-  for (const s of sources) {
-    const key = sourceKey(s);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(s);
-  }
-  return result;
 }
 
 export function AssistantWidget() {
@@ -90,10 +62,7 @@ export function AssistantWidget() {
         return;
       }
 
-      setMessages((prev) => [
-        ...prev,
-        { id: `a-${Date.now()}`, role: "assistant", text: data.answer, sources: data.sources ?? [] },
-      ]);
+      setMessages((prev) => [...prev, { id: `a-${Date.now()}`, role: "assistant", text: data.answer }]);
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -147,13 +116,20 @@ export function AssistantWidget() {
             }}
           >
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {/*
+                eslint-disable-next-line @next/next/no-img-element --
+                objectFit: "contain" (não "cover") preserva o mascote
+                inteiro sem cortar cabeça/antena/laterais. Sem
+                borderRadius/clip — assim que a imagem em
+                public/assistant-mascot.png tiver fundo transparente de
+                verdade, aparece só o mascote, sem círculo/fundo branco.
+              */}
               <img
                 src="/assistant-mascot.png"
                 alt=""
-                width={26}
-                height={26}
-                style={{ borderRadius: theme.radius.pill, objectFit: "cover", display: "block" }}
+                width={32}
+                height={32}
+                style={{ objectFit: "contain", display: "block" }}
               />
               <span style={{ fontSize: theme.font.size.base, fontWeight: 700 }}>Assistente Shopper Trilha</span>
             </span>
@@ -198,19 +174,6 @@ export function AssistantWidget() {
                 }}
               >
                 {m.text}
-                {m.sources && m.sources.length > 0 && (
-                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${theme.color.border}` }}>
-                    <p style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint, margin: "0 0 4px", fontWeight: 600 }}>
-                      Fontes
-                    </p>
-                    {dedupeSources(m.sources).map((s) => (
-                      <p key={sourceKey(s)} style={{ fontSize: theme.font.size.xs, color: theme.color.textMuted, margin: "2px 0" }}>
-                        • {s.arquivo}
-                        {s.pagina != null && ` — pág. ${s.pagina}`}
-                      </p>
-                    ))}
-                  </div>
-                )}
               </div>
             ))}
             {sending && (
@@ -281,14 +244,14 @@ export function AssistantWidget() {
           position: "fixed",
           bottom: 16,
           right: 16,
-          width: 56,
-          height: 56,
-          borderRadius: theme.radius.pill,
+          width: 64,
+          height: 64,
           border: "none",
           padding: 0,
-          overflow: "hidden",
-          background: theme.color.primary,
-          boxShadow: "0 4px 14px rgba(31, 169, 122, 0.45)",
+          // Sem background/overflow:hidden — nada de círculo por trás do
+          // mascote. Assim que a imagem tiver transparência de verdade,
+          // só o mascote aparece flutuando, como pedido.
+          background: "transparent",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -296,13 +259,26 @@ export function AssistantWidget() {
           zIndex: 900,
         }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {/*
+          eslint-disable-next-line @next/next/no-img-element --
+          objectFit: "contain" preserva a proporção e o mascote inteiro
+          (cabeça, antena, laterais) sem cortar nada — diferente do
+          "cover" anterior, que recortava pra preencher um círculo.
+          drop-shadow (não box-shadow) segue o contorno real do mascote
+          em vez de desenhar uma sombra retangular/circular atrás dele.
+        */}
         <img
           src="/assistant-mascot.png"
           alt=""
-          width={56}
-          height={56}
-          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          width={64}
+          height={64}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "contain",
+            display: "block",
+            filter: "drop-shadow(0 4px 10px rgba(15, 23, 20, 0.35))",
+          }}
         />
       </button>
     </>
