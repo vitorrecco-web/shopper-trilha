@@ -21,6 +21,49 @@ interface ChatMessage {
   error?: boolean;
 }
 
+/**
+ * Renderiza apenas o subconjunto de Markdown usado nas respostas do
+ * assistente: negrito, listas simples, parágrafos e quebras de linha.
+ * Não usa HTML bruto nem dangerouslySetInnerHTML.
+ */
+function renderInlineMarkdown(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={index}>{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
+}
+
+function renderAssistantText(text: string) {
+  const lines = text.split(/\r?\n/);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {lines.map((line, index) => {
+        const trimmed = line.trim();
+
+        if (!trimmed) {
+          return <div key={index} style={{ height: 4 }} />;
+        }
+
+        const bullet = trimmed.match(/^[-*]\s+(.+)$/);
+
+        if (bullet) {
+          return (
+            <div key={index} style={{ display: "flex", alignItems: "flex-start", gap: 7 }}>
+              <span aria-hidden="true">•</span>
+              <span>{renderInlineMarkdown(bullet[1])}</span>
+            </div>
+          );
+        }
+
+        return <div key={index}>{renderInlineMarkdown(trimmed)}</div>;
+      })}
+    </div>
+  );
+}
+
 export function AssistantWidget() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -173,7 +216,7 @@ export function AssistantWidget() {
                   whiteSpace: "pre-wrap",
                 }}
               >
-                {m.text}
+                {m.role === "assistant" && !m.error ? renderAssistantText(m.text) : m.text}
               </div>
             ))}
             {sending && (
