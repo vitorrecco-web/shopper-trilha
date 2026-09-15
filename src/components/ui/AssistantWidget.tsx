@@ -29,17 +29,24 @@ interface ChatMessage {
   error?: boolean;
 }
 
-function RobotIcon() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="4" y="8" width="16" height="12" rx="3" stroke="white" strokeWidth="1.8" />
-      <circle cx="9" cy="14" r="1.4" fill="white" />
-      <circle cx="15" cy="14" r="1.4" fill="white" />
-      <path d="M12 8V5" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
-      <circle cx="12" cy="3.6" r="1.2" fill="white" />
-      <path d="M2 13h2M20 13h2" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
+/**
+ * Chave de deduplicação de fonte: mesmo arquivo + mesma página conta
+ * como uma fonte só, mesmo que tenham vindo de chunks diferentes.
+ */
+function sourceKey(s: ChatSource): string {
+  return `${s.arquivo}__${s.pagina ?? ""}`;
+}
+
+function dedupeSources(sources: ChatSource[]): ChatSource[] {
+  const seen = new Set<string>();
+  const result: ChatSource[] = [];
+  for (const s of sources) {
+    const key = sourceKey(s);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(s);
+  }
+  return result;
 }
 
 export function AssistantWidget() {
@@ -139,7 +146,17 @@ export function AssistantWidget() {
               color: "#fff",
             }}
           >
-            <span style={{ fontSize: theme.font.size.base, fontWeight: 700 }}>Assistente Shopper Trilha</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/assistant-mascot.png"
+                alt=""
+                width={26}
+                height={26}
+                style={{ borderRadius: theme.radius.pill, objectFit: "cover", display: "block" }}
+              />
+              <span style={{ fontSize: theme.font.size.base, fontWeight: 700 }}>Assistente Shopper Trilha</span>
+            </span>
             <button
               onClick={() => setOpen(false)}
               aria-label="Fechar assistente"
@@ -183,11 +200,13 @@ export function AssistantWidget() {
                 {m.text}
                 {m.sources && m.sources.length > 0 && (
                   <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${theme.color.border}` }}>
-                    <p style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint, margin: "0 0 4px" }}>Fontes:</p>
-                    {m.sources.map((s, i) => (
-                      <p key={i} style={{ fontSize: theme.font.size.xs, color: theme.color.textMuted, margin: "2px 0" }}>
-                        📄 {s.caminho}
-                        {s.pagina != null && ` (página ${s.pagina})`}
+                    <p style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint, margin: "0 0 4px", fontWeight: 600 }}>
+                      Fontes
+                    </p>
+                    {dedupeSources(m.sources).map((s) => (
+                      <p key={sourceKey(s)} style={{ fontSize: theme.font.size.xs, color: theme.color.textMuted, margin: "2px 0" }}>
+                        • {s.arquivo}
+                        {s.pagina != null && ` — pág. ${s.pagina}`}
                       </p>
                     ))}
                   </div>
@@ -266,6 +285,8 @@ export function AssistantWidget() {
           height: 56,
           borderRadius: theme.radius.pill,
           border: "none",
+          padding: 0,
+          overflow: "hidden",
           background: theme.color.primary,
           boxShadow: "0 4px 14px rgba(31, 169, 122, 0.45)",
           display: "flex",
@@ -275,7 +296,14 @@ export function AssistantWidget() {
           zIndex: 900,
         }}
       >
-        <RobotIcon />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/assistant-mascot.png"
+          alt=""
+          width={56}
+          height={56}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        />
       </button>
     </>
   );

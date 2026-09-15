@@ -45,6 +45,15 @@ export default async function AdminHomePage() {
               Gerenciar conteúdos e sincronizar a trilha
             </p>
           </ClickableCard>
+
+          <ClickableCard href="/admin/base-conhecimento">
+            <h2 style={{ fontSize: theme.font.size.md, margin: 0, marginBottom: 6, color: theme.color.text }}>
+              Base de Conhecimento
+            </h2>
+            <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: 0 }}>
+              Documentos e busca usados pelo Assistente Shopper Trilha
+            </p>
+          </ClickableCard>
         </div>
 
         {/*

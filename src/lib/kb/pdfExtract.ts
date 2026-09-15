@@ -1,15 +1,15 @@
 import "server-only";
 
 /**
- * ExtraÃ§Ã£o de texto de PDF, preservando a pÃ¡gina de origem â€” server-side,
- * sem worker/DOM (usa o build "legacy" do pdfjs-dist, que jÃ¡ Ã©
- * dependÃªncia do projeto para o leitor de PDF da trilha).
+ * Extração de texto de PDF, preservando a página de origem — server-side,
+ * sem worker/DOM (usa o build "legacy" do pdfjs-dist, que já é
+ * dependência do projeto para o leitor de PDF da trilha).
  *
  * Validado manualmente antes de escrever este arquivo: gerei um PDF de
- * teste de 2 pÃ¡ginas com texto conhecido e confirmei que
+ * teste de 2 páginas com texto conhecido e confirmei que
  * `getDocument({ data, useWorkerFetch: false, isEvalSupported: false })`
- * extrai o texto correto de cada pÃ¡gina sem precisar de
- * `GlobalWorkerOptions.workerSrc` (que sÃ³ faz sentido no navegador).
+ * extrai o texto correto de cada página sem precisar de
+ * `GlobalWorkerOptions.workerSrc` (que só faz sentido no navegador).
  */
 
 export interface ExtractedPage {
@@ -22,7 +22,7 @@ export interface ExtractedPdf {
   pageCount: number;
 }
 
-/** Abaixo disso, uma pÃ¡gina Ã© tratada como "sem texto extraÃ­do" (provÃ¡vel PDF escaneado). */
+/** Abaixo disso, uma página é tratada como "sem texto extraído" (provável PDF escaneado). */
 const MIN_CHARS_PER_PAGE_TO_COUNT_AS_TEXT = 20;
 
 export async function extractPdfText(buffer: Buffer): Promise<ExtractedPdf> {
@@ -67,9 +67,9 @@ export async function extractPdfText(buffer: Buffer): Promise<ExtractedPdf> {
 }
 
 /**
- * Um PDF Ã© considerado "provÃ¡vel escaneado / sem camada de texto" se
- * NENHUMA pÃ¡gina tiver uma quantidade mÃ­nima de caracteres extraÃ­dos â€”
- * evita marcar como erro um PDF que sÃ³ tem uma pÃ¡gina de capa vazia,
+ * Um PDF é considerado "provável escaneado / sem camada de texto" se
+ * NENHUMA página tiver uma quantidade mínima de caracteres extraídos —
+ * evita marcar como erro um PDF que só tem uma página de capa vazia,
  * mas tem texto de verdade nas demais.
  */
 export function looksLikeScannedPdf(extracted: ExtractedPdf): boolean {

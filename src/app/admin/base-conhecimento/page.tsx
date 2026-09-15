@@ -18,9 +18,9 @@ export default async function BaseConhecimentoPage() {
         <Breadcrumb items={[{ label: "Painel do Gestor", href: "/admin" }, { label: "Base de Conhecimento" }]} />
         <h1 style={{ fontSize: theme.font.size.xxl, marginTop: 0, marginBottom: 4 }}>Base de Conhecimento</h1>
         <p style={{ color: theme.color.textMuted, fontSize: theme.font.size.sm, marginBottom: theme.space(5) }}>
-          Fase 1 do Assistente Shopper: indexação dos documentos em <code>Trilha de Liderança / documentos/</code> e
-          teste de busca semântica. Totalmente separado da sincronização da trilha — sem chat visual ainda, sem
-          geração de resposta por IA ainda.
+          Base de conhecimento utilizada pelo Assistente Shopper Trilha. Os documentos da pasta{" "}
+          <code>documentos</code> do Google Drive são indexados aqui e usados como fonte das respostas do
+          assistente.
         </p>
         <KbPanel />
       </Container>

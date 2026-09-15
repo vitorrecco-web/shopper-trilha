@@ -44,7 +44,7 @@ interface SearchResultItem {
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return "â€”";
+  if (!iso) return "—";
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
@@ -90,7 +90,7 @@ export function KbPanel() {
         documents: Array.isArray(data.documents) ? data.documents : [],
       });
     } catch {
-      setStatus({ ok: false, lastSync: null, documents: [], error: "Erro de conexÃ£o." });
+      setStatus({ ok: false, lastSync: null, documents: [], error: "Erro de conexão." });
     } finally {
       setLoadingStatus(false);
     }
@@ -109,7 +109,7 @@ export function KbPanel() {
       setSyncResult(data);
       await loadStatus();
     } catch {
-      setSyncResult({ ok: false, error: "Erro de conexÃ£o." });
+      setSyncResult({ ok: false, error: "Erro de conexão." });
     } finally {
       setSyncing(false);
     }
@@ -129,12 +129,12 @@ export function KbPanel() {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
-        setSearchError(data.error ?? "NÃ£o foi possÃ­vel buscar agora.");
+        setSearchError(data.error ?? "Não foi possível buscar agora.");
         return;
       }
       setSearchResults(data.results);
     } catch {
-      setSearchError("Erro de conexÃ£o.");
+      setSearchError("Erro de conexão.");
     } finally {
       setSearching(false);
     }
@@ -142,17 +142,17 @@ export function KbPanel() {
 
   return (
     <div>
-      {/* SincronizaÃ§Ã£o */}
+      {/* Sincronização */}
       <div style={boxStyle}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
           <div>
-            <h2 style={{ fontSize: theme.font.size.md, margin: 0, color: theme.color.text }}>SincronizaÃ§Ã£o</h2>
+            <h2 style={{ fontSize: theme.font.size.md, margin: 0, color: theme.color.text }}>Sincronização</h2>
             <p style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint, marginTop: 4, marginBottom: 0 }}>
-              Ãšltima execuÃ§Ã£o:{" "}
+              Última execução:{" "}
               {loadingStatus
                 ? "carregando..."
                 : status?.lastSync
-                  ? `${formatDate(status.lastSync.started_at)} â€” ${status.lastSync.status}`
+                  ? `${formatDate(status.lastSync.started_at)} — ${status.lastSync.status}`
                   : "nunca"}
             </p>
           </div>
@@ -173,9 +173,9 @@ export function KbPanel() {
           >
             {syncResult.ok && syncResult.summary ? (
               <span style={{ color: theme.color.text }}>
-                Novos: <b>{syncResult.summary.novos}</b> Â· Atualizados: <b>{syncResult.summary.atualizados}</b> Â·
-                Inalterados: <b>{syncResult.summary.inalterados}</b> Â· Removidos: <b>{syncResult.summary.removidos}</b> Â·
-                Com erro: <b>{syncResult.summary.comErro}</b> Â· NÃ£o suportados: <b>{syncResult.summary.naoSuportados}</b>
+                Novos: <b>{syncResult.summary.novos}</b> · Atualizados: <b>{syncResult.summary.atualizados}</b> ·
+                Inalterados: <b>{syncResult.summary.inalterados}</b> · Removidos: <b>{syncResult.summary.removidos}</b> ·
+                Com erro: <b>{syncResult.summary.comErro}</b> · Não suportados: <b>{syncResult.summary.naoSuportados}</b>
               </span>
             ) : (
               <span style={{ color: theme.color.danger }}>{syncResult.error}</span>
@@ -200,31 +200,31 @@ export function KbPanel() {
                   <Badge tone="neutral">{doc.categoria}</Badge>
                 </div>
                 <div style={{ color: theme.color.textMuted, marginTop: 2 }}>
-                  {doc.pageCount ? `${doc.pageCount} pÃ¡ginas` : "â€”"} Â· indexado em {formatDate(doc.lastIndexedAt)}
+                  {doc.pageCount ? `${doc.pageCount} páginas` : "—"} · indexado em {formatDate(doc.lastIndexedAt)}
                 </div>
                 {doc.error && (
-                  <div style={{ color: theme.color.danger, marginTop: 4 }}>âš  {doc.error}</div>
+                  <div style={{ color: theme.color.danger, marginTop: 4 }}>⚠ {doc.error}</div>
                 )}
               </div>
             ))}
           </div>
         ) : (
           <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted }}>
-            Nenhum documento indexado ainda â€” rode a sincronizaÃ§Ã£o acima.
+            Nenhum documento indexado ainda — rode a sincronização acima.
           </p>
         )}
       </div>
 
-      {/* Teste de busca semÃ¢ntica */}
+      {/* Teste de busca na base */}
       <div style={boxStyle}>
         <h2 style={{ fontSize: theme.font.size.md, marginTop: 0, marginBottom: 12, color: theme.color.text }}>
-          Testar busca semÃ¢ntica
+          Testar busca na base
         </h2>
         <form onSubmit={handleSearch} style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Ex: quantos dias de fÃ©rias um colaborador tem direito?"
+            placeholder="Ex: quantos dias de férias um colaborador tem direito?"
             style={{
               flex: "1 1 260px",
               padding: "10px 12px",
@@ -268,7 +268,7 @@ export function KbPanel() {
                 <p style={{ fontSize: 13, color: theme.color.text, margin: 0, whiteSpace: "pre-wrap" }}>{r.content}</p>
                 <p style={{ fontSize: 11.5, color: theme.color.textFaint, marginTop: 6, marginBottom: 0 }}>
                   {r.categoria}
-                  {r.pageStart != null && (r.pageStart === r.pageEnd ? ` Â· pÃ¡gina ${r.pageStart}` : ` Â· pÃ¡ginas ${r.pageStart}-${r.pageEnd}`)}
+                  {r.pageStart != null && (r.pageStart === r.pageEnd ? ` · página ${r.pageStart}` : ` · páginas ${r.pageStart}-${r.pageEnd}`)}
                 </p>
               </div>
             ))}
