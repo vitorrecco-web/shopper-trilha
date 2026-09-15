@@ -22,7 +22,7 @@ import type { DriveItem, DriveLister } from "./types";
  * completo e para Domain-Wide Delegation como alternativa de produção.
  */
 
-function getAuth() {
+export function getAuth() {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
   const refreshToken = process.env.GOOGLE_OAUTH_REFRESH_TOKEN;
