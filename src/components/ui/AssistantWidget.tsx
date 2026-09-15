@@ -149,6 +149,7 @@ export function AssistantWidget() {
         >
           {/* Cabeçalho */}
           <div
+            className="assistant-chat-header"
             style={{
               display: "flex",
               alignItems: "center",
@@ -194,7 +195,7 @@ export function AssistantWidget() {
           </div>
 
           {/* Mensagens */}
-          <div ref={listRef} style={{ flex: "1 1 auto", overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="assistant-chat-messages" ref={listRef} style={{ flex: "1 1 auto", overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
             {messages.length === 0 && (
               <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: 0 }}>
                 Pergunte algo sobre os documentos da Trilha de Liderança (políticas, liderança, etc). Eu só respondo
@@ -237,7 +238,7 @@ export function AssistantWidget() {
           </div>
 
           {/* Entrada */}
-          <div style={{ display: "flex", gap: 8, padding: 10, borderTop: `1px solid ${theme.color.border}` }}>
+          <div className="assistant-chat-input" style={{ display: "flex", gap: 8, padding: 10, borderTop: `1px solid ${theme.color.border}` }}>
             <textarea
               ref={textareaRef}
               value={input}
@@ -332,28 +333,33 @@ export function AssistantWidget() {
 
         @media (max-width: 600px) {
           .assistant-chat-panel {
-            left: 12px !important;
-            right: 12px !important;
-            bottom: 82px !important;
+            position: fixed !important;
+            inset: 0 !important;
+            width: 100vw !important;
             max-width: none !important;
-
-            /*
-             * No celular o chat abre mais compacto.
-             * As mensagens continuam com rolagem interna.
-             */
-            height: min(58dvh, 460px) !important;
-            max-height: calc(100dvh - 140px);
+            height: 100dvh !important;
+            max-height: none !important;
+            margin: 0 !important;
+            border-radius: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
           }
-        }
 
-        /*
-         * Quando a altura disponível fica pequena, como ao abrir
-         * o teclado virtual, reduzimos ainda mais o painel.
-         */
-        @media (max-width: 600px) and (max-height: 650px) {
-          .assistant-chat-panel {
-            height: min(52dvh, 380px) !important;
-            max-height: calc(100dvh - 110px);
+          .assistant-chat-panel .assistant-chat-header {
+            flex: 0 0 auto;
+          }
+
+          .assistant-chat-panel .assistant-chat-messages {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+
+          .assistant-chat-panel .assistant-chat-input {
+            flex: 0 0 auto;
+            padding-bottom: calc(10px + env(safe-area-inset-bottom));
+            background: white;
           }
         }
       `}</style>
