@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/getSession";
 import { checkChatRateLimit } from "@/lib/kb/chatRateLimiter";
 import { searchKnowledgeBase } from "@/lib/kb/kbSearchService";
-import { generateAnswer, NAO_ENCONTREI } from "@/lib/kb/generation";
+import { generateAnswer, generateSearchQueries, NAO_ENCONTREI } from "@/lib/kb/generation";
 
 /**
  * Rota do Assistente Shopper — chat com RAG sobre a Base de
@@ -71,15 +71,49 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const results = await searchKnowledgeBase(parsed.data.question, TOP_K);
-    const relevant = results.filter((r) => r.score >= MIN_SCORE_THRESHOLD);
+    const question = parsed.data.question;
+
+    // Primeiro tenta a pergunta exatamente como o usuário escreveu.
+    const directResults = await searchKnowledgeBase(question, TOP_K);
+    let relevant = directResults.filter((r) => r.score >= MIN_SCORE_THRESHOLD);
+
+    // Se a busca direta não encontrar nada, o Gemini reformula a
+    // intenção em consultas curtas, aproximando a linguagem natural
+    // do usuário da terminologia encontrada nos documentos.
+    if (relevant.length === 0) {
+      const alternativeQueries = await generateSearchQueries(question);
+
+      if (alternativeQueries.length > 0) {
+        const expandedResults = await Promise.all(
+          alternativeQueries.map((query) => searchKnowledgeBase(query, TOP_K))
+        );
+
+        // O mesmo trecho pode aparecer em mais de uma consulta.
+        // Mantemos apenas uma cópia e preservamos o melhor score.
+        const byChunkId = new Map<string, (typeof directResults)[number]>();
+
+        for (const result of expandedResults.flat()) {
+          if (result.score < MIN_SCORE_THRESHOLD) continue;
+
+          const current = byChunkId.get(result.chunkId);
+
+          if (!current || result.score > current.score) {
+            byChunkId.set(result.chunkId, result);
+          }
+        }
+
+        relevant = Array.from(byChunkId.values())
+          .sort((a, b) => b.score - a.score)
+          .slice(0, TOP_K);
+      }
+    }
 
     if (relevant.length === 0) {
       return NextResponse.json({ ok: true, answer: NAO_ENCONTREI, sources: [] });
     }
 
     const { answer } = await generateAnswer(
-      parsed.data.question,
+      question,
       relevant.map((r) => ({
         content: r.content,
         arquivo: r.arquivo,

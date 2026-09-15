@@ -78,6 +78,82 @@ export interface GenerationResult {
   answer: string;
 }
 
+/**
+ * Transforma uma pergunta natural do usuário em consultas curtas para
+ * recuperação textual. Não responde à pergunta e não usa conhecimento
+ * externo para montar a resposta final; serve apenas para melhorar a
+ * localização de trechos já existentes na Base de Conhecimento.
+ */
+export async function generateSearchQueries(question: string): Promise<string[]> {
+  const prompt = `Você ajuda um mecanismo de busca textual interno.
+
+Sua única tarefa é transformar a pergunta do usuário em até 3 consultas curtas de busca em português.
+
+Regras:
+- NÃO responda à pergunta.
+- NÃO invente informações.
+- Preserve nomes de processos, áreas, sistemas, siglas e termos operacionais mencionados pelo usuário.
+- Remova frases de conversa como "queria saber", "como faço", "me explica", "gostaria de entender".
+- Gere consultas que possam corresponder ao vocabulário de documentos de treinamento e procedimentos.
+- Inclua sinônimos ou formas prováveis de o mesmo conceito aparecer em um procedimento.
+- Cada consulta deve ter entre 2 e 8 palavras.
+- Retorne SOMENTE um JSON no formato:
+{"queries":["consulta 1","consulta 2","consulta 3"]}
+
+PERGUNTA:
+${question}`;
+
+  const url = `${GEMINI_API_BASE}/models/${GEMINI_GENERATION_MODEL}:generateContent`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": getApiKey(),
+    },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0,
+        maxOutputTokens: 200,
+        responseMimeType: "application/json",
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    // A reformulação é apenas um fallback. Se falhar, a rota pode
+    // continuar normalmente com a busca original.
+    return [];
+  }
+
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+
+  const raw =
+    data.candidates?.[0]?.content?.parts
+      ?.map((p) => p.text ?? "")
+      .join("")
+      .trim() ?? "";
+
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw) as { queries?: unknown };
+
+    if (!Array.isArray(parsed.queries)) return [];
+
+    return parsed.queries
+      .filter((q): q is string => typeof q === "string")
+      .map((q) => q.trim())
+      .filter(Boolean)
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
+}
+
 export async function generateAnswer(
   question: string,
   chunks: GenerationContextChunk[]
