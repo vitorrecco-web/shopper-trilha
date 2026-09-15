@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/getSession";
 import { checkChatRateLimit } from "@/lib/kb/chatRateLimiter";
 import { searchKnowledgeBase } from "@/lib/kb/kbSearchService";
-import { generateAnswer, generateSearchQueries, NAO_ENCONTREI } from "@/lib/kb/generation";
+import { generateAnswer, generateSearchQueries, PRECISO_DE_MAIS_CONTEXTO } from "@/lib/kb/generation";
 
 /**
  * Rota do Assistente Shopper — chat com RAG sobre a Base de
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (relevant.length === 0) {
-      return NextResponse.json({ ok: true, answer: NAO_ENCONTREI, sources: [] });
+      return NextResponse.json({ ok: true, answer: PRECISO_DE_MAIS_CONTEXTO, sources: [] });
     }
 
     const { answer } = await generateAnswer(
@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
     // mensagem de erro técnica (do Gemini/Supabase), útil pra diagnóstico.
     console.error("Erro no Assistente Shopper:", err instanceof Error ? err.message : err);
     return NextResponse.json(
-      { ok: false, error: "Não foi possível responder agora. Tente novamente em instantes." },
+      { ok: false, error: "Tive dificuldade para localizar essa informação do jeito que a pergunta foi escrita. Tente reformular com um pouco mais de contexto." },
       { status: 500 }
     );
   }

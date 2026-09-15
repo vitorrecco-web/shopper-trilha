@@ -26,6 +26,8 @@ const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
  * acima do limiar de score (nesse caso nem chamamos o Gemini).
  */
 export const NAO_ENCONTREI = "Não encontrei essa informação nos documentos disponíveis na Trilha de Liderança.";
+export const PRECISO_DE_MAIS_CONTEXTO =
+  "Não consegui identificar com segurança a informação que você procura. Pode me dar um pouco mais de contexto sobre a etapa ou processo? Por exemplo: início da atividade, carrinho, pedido, conferência ou finalização.";
 
 function getApiKey(): string {
   const key = process.env.GEMINI_API_KEY;
