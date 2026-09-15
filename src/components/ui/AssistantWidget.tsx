@@ -127,6 +127,7 @@ export function AssistantWidget() {
     <>
       {open && (
         <div
+          className="assistant-chat-panel"
           role="dialog"
           aria-label="Assistente Shopper Trilha"
           style={{
@@ -136,7 +137,6 @@ export function AssistantWidget() {
             left: 16,
             maxWidth: 380,
             marginLeft: "auto",
-            height: "min(70dvh, 560px)",
             background: theme.color.surface,
             borderRadius: theme.radius.lg,
             boxShadow: "0 8px 32px rgba(15, 23, 20, 0.22)",
@@ -324,6 +324,39 @@ export function AssistantWidget() {
           }}
         />
       </button>
+
+      <style jsx global>{`
+        .assistant-chat-panel {
+          height: min(70dvh, 560px);
+        }
+
+        @media (max-width: 600px) {
+          .assistant-chat-panel {
+            left: 12px !important;
+            right: 12px !important;
+            bottom: 82px !important;
+            max-width: none !important;
+
+            /*
+             * No celular o chat abre mais compacto.
+             * As mensagens continuam com rolagem interna.
+             */
+            height: min(58dvh, 460px) !important;
+            max-height: calc(100dvh - 140px);
+          }
+        }
+
+        /*
+         * Quando a altura disponível fica pequena, como ao abrir
+         * o teclado virtual, reduzimos ainda mais o painel.
+         */
+        @media (max-width: 600px) and (max-height: 650px) {
+          .assistant-chat-panel {
+            height: min(52dvh, 380px) !important;
+            max-height: calc(100dvh - 110px);
+          }
+        }
+      `}</style>
     </>
   );
 }
