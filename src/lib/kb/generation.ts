@@ -15,7 +15,7 @@ import "server-only";
  * ele está disponível na sua conta Free Tier.
  */
 
-const GEMINI_GENERATION_MODEL = "gemini-2.5-flash";
+const GEMINI_GENERATION_MODEL = "gemini-3.6-flash";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
 /**
