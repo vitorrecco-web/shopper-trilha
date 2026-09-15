@@ -3,7 +3,6 @@ import { listAllFilesRecursively, getKbRootFolderId, isSupportedForIndexing } fr
 import { fetchDriveFileAsBuffer } from "@/lib/drive/googleDriveClient";
 import { extractPdfText, looksLikeScannedPdf } from "./pdfExtract";
 import { chunkDocument } from "./chunker";
-import { embedTexts } from "./embeddings";
 import {
   listAllKbDocuments,
   upsertKbDocument,
@@ -96,7 +95,6 @@ export async function runKbSync(): Promise<KbSyncSummary> {
         }
 
         const chunks = chunkDocument(extracted.pages);
-        const embeddings = await embedTexts(chunks.map((c) => c.content));
 
         const documentId = await upsertKbDocument({
           drive_file_id: file.id,
@@ -120,7 +118,7 @@ export async function runKbSync(): Promise<KbSyncSummary> {
             pageStart: c.pageStart,
             pageEnd: c.pageEnd,
             tokenCount: c.tokenCount,
-            embedding: embeddings[i],
+            embedding: null,
           }))
         );
 

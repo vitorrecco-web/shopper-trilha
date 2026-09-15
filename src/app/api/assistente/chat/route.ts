@@ -25,7 +25,7 @@ import { generateAnswer, NAO_ENCONTREI } from "@/lib/kb/generation";
  * muda a escala de score em relação ao que foi observado com OpenAI).
  * Ajuste aqui depois de testar com perguntas reais.
  */
-const MIN_SCORE_THRESHOLD = 0.5;
+const MIN_SCORE_THRESHOLD = 0;
 const TOP_K = 5;
 
 const chatSchema = z.object({

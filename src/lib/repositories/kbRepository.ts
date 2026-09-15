@@ -101,7 +101,7 @@ export interface ChunkInsert {
   pageStart: number | null;
   pageEnd: number | null;
   tokenCount: number;
-  embedding: number[];
+  embedding: number[] | null;
 }
 
 /** Substitui todos os chunks de um documento (usado quando o conteúdo mudou de verdade). */
