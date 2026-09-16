@@ -86,12 +86,18 @@ export interface GenerationResult {
  * externo para montar a resposta final; serve apenas para melhorar a
  * localização de trechos já existentes na Base de Conhecimento.
  */
-export async function generateSearchQueries(question: string): Promise<string[]> {
+export async function generateSearchQueries(question: string, moduleContext = ""): Promise<string[]> {
   const prompt = `Você ajuda um mecanismo de busca textual interno.
 
 Sua única tarefa é transformar a pergunta do usuário em até 3 consultas curtas de busca em português.
 
+CONTEXTO DO MÓDULO/PROCESSO:
+${moduleContext || "não informado"}
+
 Regras:
+- Quando houver contexto de módulo/processo, gere consultas compatíveis com esse processo.
+- Use termos operacionais que provavelmente aparecem nos documentos desse módulo.
+- Não misture processos diferentes.
 - NÃO responda à pergunta.
 - NÃO invente informações.
 - Preserve nomes de processos, áreas, sistemas, siglas e termos operacionais mencionados pelo usuário.

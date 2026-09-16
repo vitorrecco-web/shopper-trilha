@@ -28,6 +28,52 @@ import { generateAnswer, generateSearchQueries, NAO_ENCONTREI, PRECISO_DE_MAIS_C
 const MIN_SCORE_THRESHOLD = 0;
 const TOP_K = 5;
 
+function normalizeSearchText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function getModuleKeywords(moduleName: string): string[] {
+  const ignored = new Set([
+    "pop",
+    "processo",
+    "processos",
+    "procedimento",
+    "procedimentos",
+    "operacional",
+    "operacionais",
+    "padrao",
+    "modulo",
+    "treinamento",
+  ]);
+
+  return normalizeSearchText(moduleName)
+    .split(/[^a-z0-9]+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length >= 4 && !ignored.has(part));
+}
+
+function resultMatchesModule(
+  result: {
+    arquivo: string;
+    caminho: string;
+    categoria: string;
+  },
+  moduleName: string
+): boolean {
+  const keywords = getModuleKeywords(moduleName);
+
+  if (keywords.length === 0) return true;
+
+  const searchable = normalizeSearchText(
+    `${result.arquivo} ${result.caminho} ${result.categoria}`
+  );
+
+  return keywords.some((keyword) => searchable.includes(keyword));
+}
+
 const chatSchema = z.object({
   question: z
     .string()
@@ -91,7 +137,7 @@ export async function POST(request: NextRequest) {
         const directResults = await searchKnowledgeBase(reviewQuestion, TOP_K);
 
         // 2. Gera formas alternativas de procurar o mesmo assunto.
-        const alternativeQueries = await generateSearchQueries(reviewQuestion);
+        const alternativeQueries = await generateSearchQueries(reviewQuestion, reviewModule);
 
         // 3. Busca também pelas consultas reformuladas.
         const alternativeResults =
@@ -114,6 +160,12 @@ export async function POST(request: NextRequest) {
           ...alternativeResults.flat(),
         ]) {
           if (result.score < MIN_SCORE_THRESHOLD) continue;
+
+          // Durante a revisão de quiz, não usamos documentos de outro
+          // processo apenas porque possuem palavras semelhantes.
+          if (reviewModule && !resultMatchesModule(result, reviewModule)) {
+            continue;
+          }
 
           const current = byChunkId.get(result.chunkId);
 
