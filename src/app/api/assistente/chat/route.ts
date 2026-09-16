@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/getSession";
 import { checkChatRateLimit } from "@/lib/kb/chatRateLimiter";
 import { searchKnowledgeBase } from "@/lib/kb/kbSearchService";
-import { generateAnswer, generateSearchQueries, PRECISO_DE_MAIS_CONTEXTO } from "@/lib/kb/generation";
+import { generateAnswer, generateSearchQueries, NAO_ENCONTREI, PRECISO_DE_MAIS_CONTEXTO } from "@/lib/kb/generation";
 
 /**
  * Rota do Assistente Shopper — chat com RAG sobre a Base de
@@ -76,73 +76,118 @@ export async function POST(request: NextRequest) {
     const question = parsed.data.question;
 
     // Modo de revisão após reprovação no quiz.
-    // Cada questão errada é buscada separadamente para evitar transformar
-    // várias dúvidas diferentes em uma única consulta textual gigante.
+    // Cada questão é tratada de forma independente para garantir que
+    // o material encontrado realmente ajude naquele assunto específico.
     if (parsed.data.reviewQuestions?.length) {
       const reviewQuestions = parsed.data.reviewQuestions.slice(0, 10);
+      const reviewSections: string[] = [];
 
-      const reviewSearches = await Promise.all(
-        reviewQuestions.map((reviewQuestion) =>
-          searchKnowledgeBase(reviewQuestion, TOP_K)
-        )
-      );
+      for (let index = 0; index < reviewQuestions.length; index++) {
+        const reviewQuestion = reviewQuestions[index];
 
-      const byChunkId = new Map<
-        string,
-        (typeof reviewSearches)[number][number]
-      >();
+        // 1. Busca direta pela questão.
+        const directResults = await searchKnowledgeBase(reviewQuestion, TOP_K);
 
-      for (const result of reviewSearches.flat()) {
-        if (result.score < MIN_SCORE_THRESHOLD) continue;
+        // 2. Gera formas alternativas de procurar o mesmo assunto.
+        const alternativeQueries = await generateSearchQueries(reviewQuestion);
 
-        const current = byChunkId.get(result.chunkId);
+        // 3. Busca também pelas consultas reformuladas.
+        const alternativeResults =
+          alternativeQueries.length > 0
+            ? await Promise.all(
+                alternativeQueries.map((query) =>
+                  searchKnowledgeBase(query, TOP_K)
+                )
+              )
+            : [];
 
-        if (!current || result.score > current.score) {
-          byChunkId.set(result.chunkId, result);
+        // 4. Junta os candidatos e remove chunks duplicados.
+        const byChunkId = new Map<
+          string,
+          (typeof directResults)[number]
+        >();
+
+        for (const result of [
+          ...directResults,
+          ...alternativeResults.flat(),
+        ]) {
+          if (result.score < MIN_SCORE_THRESHOLD) continue;
+
+          const current = byChunkId.get(result.chunkId);
+
+          if (!current || result.score > current.score) {
+            byChunkId.set(result.chunkId, result);
+          }
         }
+
+        const candidates = Array.from(byChunkId.values())
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 6);
+
+        if (candidates.length === 0) {
+          continue;
+        }
+
+        // 5. O Gemini avalia SOMENTE essa questão e seus candidatos.
+        // Se os documentos não sustentarem a explicação, deve usar o
+        // fallback padrão de "não encontrei".
+        const reviewPrompt = `O usuário errou uma questão de avaliação e quer estudar o assunto antes de tentar novamente.
+
+QUESTÃO:
+${reviewQuestion}
+
+Explique somente o conceito, procedimento ou regra necessária para entender esse assunto, usando SOMENTE os documentos fornecidos.
+
+Regras:
+- Não informe qual alternativa da prova era correta.
+- Não entregue gabarito.
+- Não invente etapas ou procedimentos.
+- A explicação precisa realmente ajudar a compreender a questão acima.
+- Se os documentos fornecidos não contiverem informação suficiente para explicar esse assunto com segurança, use exatamente a resposta de falta de evidência definida pelo sistema.
+- Seja direto e didático.`;
+
+        const { answer } = await generateAnswer(
+          reviewPrompt,
+          candidates.map((result) => ({
+            content: result.content,
+            arquivo: result.arquivo,
+            caminho: result.caminho,
+            pagina:
+              result.pageStart !== null
+                ? String(result.pageStart)
+                : null,
+          }))
+        );
+
+        if (
+          answer.trim() === NAO_ENCONTREI ||
+          answer.trim() === PRECISO_DE_MAIS_CONTEXTO
+        ) {
+          continue;
+        }
+
+        reviewSections.push(
+          `**${index + 1}. ${reviewQuestion}**\n\n${answer.trim()}`
+        );
       }
 
-      const reviewResults = Array.from(byChunkId.values())
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 10);
-
-      if (reviewResults.length === 0) {
+      if (reviewSections.length === 0) {
         return NextResponse.json({
           ok: true,
           answer:
-            "Não consegui localizar material suficiente para revisar essas questões. Tente abrir o material do módulo ou me pergunte sobre um dos assuntos separadamente.",
+            "Não consegui localizar nos materiais informações suficientes para revisar os pontos que você errou. Você pode abrir o material do módulo ou me perguntar sobre um dos assuntos separadamente.",
           sources: [],
         });
       }
 
-      const reviewPrompt = `Ajude o usuário a revisar os assuntos relacionados às questões que ele errou em uma avaliação.
-
-QUESTÕES ERRADAS:
-${reviewQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}
-
-Monte uma revisão didática usando SOMENTE o contexto dos documentos fornecidos.
-
-Regras:
-- Não informe qual alternativa era a correta.
-- Não entregue um gabarito.
-- Explique os conceitos e procedimentos necessários para a pessoa aprender.
-- Organize a revisão em tópicos claros.
-- Quando houver vários assuntos, separe-os.
-- Seja objetivo, mas suficientemente explicativo para ajudar em uma nova tentativa.`;
-
-      const { answer } = await generateAnswer(
-        reviewPrompt,
-        reviewResults.map((r) => ({
-          content: r.content,
-          arquivo: r.arquivo,
-          caminho: r.caminho,
-          pagina: r.pageStart !== null ? String(r.pageStart) : null,
-        }))
-      );
+      const intro =
+        reviewSections.length === 1
+          ? "Encontrei material para revisar um dos pontos da avaliação:"
+          : "Encontrei material para revisar estes pontos da avaliação:";
 
       return NextResponse.json({
         ok: true,
-        answer,
+        answer: `${intro}\n\n${reviewSections.join("\n\n")}`,
         sources: [],
       });
     }
