@@ -127,6 +127,10 @@ export async function POST(request: NextRequest) {
           .slice(0, 6);
 
         if (candidates.length === 0) {
+          reviewSections.push(
+            `**${index + 1}. ${reviewQuestion}**` +
+              `\n\nNão encontrei material suficiente deste módulo para revisar este ponto com segurança.`
+          );
           continue;
         }
 
@@ -154,7 +158,7 @@ Regras:
 - Não misture procedimentos de áreas/processos diferentes apenas porque possuem palavras semelhantes.
 - Não invente etapas ou procedimentos.
 - A explicação precisa realmente ajudar a compreender a questão acima.
-- Se os documentos fornecidos não contiverem informação suficiente para explicar esse assunto com segurança, use exatamente a resposta de falta de evidência definida pelo sistema.
+- Se os documentos fornecidos não contiverem informação suficiente para explicar esse assunto com segurança, não invente uma resposta.
 - Seja direto e didático.`;
 
         const { answer } = await generateAnswer(
@@ -170,15 +174,30 @@ Regras:
           }))
         );
 
+        const cleanAnswer = answer.trim();
+
+        const leakedInstruction =
+          /responda\s+exatamente/i.test(cleanAnswer) ||
+          /sem\s+adicionar\s+mais\s+nada/i.test(cleanAnswer) ||
+          /não\s+encontrei\s+essa\s+informação\s+nos\s+documentos/i.test(cleanAnswer) ||
+          /gabarito\s+text/i.test(cleanAnswer) ||
+          /system[_ -]?prompt/i.test(cleanAnswer) ||
+          /instruç(ão|ões)\s+(do\s+)?sistema/i.test(cleanAnswer);
+
         if (
-          answer.trim() === NAO_ENCONTREI ||
-          answer.trim() === PRECISO_DE_MAIS_CONTEXTO
+          cleanAnswer === NAO_ENCONTREI ||
+          cleanAnswer === PRECISO_DE_MAIS_CONTEXTO ||
+          leakedInstruction
         ) {
+          reviewSections.push(
+            `**${index + 1}. ${reviewQuestion}**` +
+              `\n\nNão encontrei material suficiente deste módulo para revisar este ponto com segurança.`
+          );
           continue;
         }
 
         reviewSections.push(
-          `**${index + 1}. ${reviewQuestion}**\n\n${answer.trim()}`
+          `**${index + 1}. ${reviewQuestion}**\n\n${cleanAnswer}`
         );
       }
 
