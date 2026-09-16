@@ -105,21 +105,70 @@ export function AssistantWidget() {
     };
   }, []);
 
-  function handleAcceptQuizHelp() {
+  async function handleAcceptQuizHelp() {
     const questions = quizHelp?.wrongQuestions ?? [];
-
-    const reviewText =
-      questions.length > 0
-        ? `Quero revisar os assuntos relacionados às questões que errei na avaliação: ${questions.join(" | ")}`
-        : "Quero revisar o conteúdo da avaliação em que não atingi a nota mínima.";
 
     setQuizHelp(null);
     setOpen(true);
-    setInput(reviewText);
 
-    window.setTimeout(() => {
-      textareaRef.current?.focus();
-    }, 100);
+    const userMessage: ChatMessage = {
+      id: `u-review-${Date.now()}`,
+      role: "user",
+      text: "Quero ajuda para revisar os pontos da avaliação.",
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setSending(true);
+
+    try {
+      const res = await fetch("/api/assistente/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: "Quero revisar os assuntos das questões que errei na avaliação.",
+          reviewQuestions: questions,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `a-review-${Date.now()}`,
+            role: "assistant",
+            text:
+              data.error ??
+              "Não consegui preparar a revisão agora. Você pode me perguntar sobre um dos assuntos separadamente.",
+            error: true,
+          },
+        ]);
+        return;
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `a-review-${Date.now()}`,
+          role: "assistant",
+          text: data.answer,
+        },
+      ]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `a-review-${Date.now()}`,
+          role: "assistant",
+          text:
+            "Não consegui preparar a revisão agora. Você pode me perguntar sobre um dos assuntos separadamente.",
+          error: true,
+        },
+      ]);
+    } finally {
+      setSending(false);
+    }
   }
 
   async function handleSend() {

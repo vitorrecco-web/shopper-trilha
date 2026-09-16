@@ -34,6 +34,8 @@ const chatSchema = z.object({
     .trim()
     .min(1, "Digite uma pergunta.")
     .max(1000, "Pergunta muito longa (máximo de 1000 caracteres)."),
+  reviewQuestions: z.array(z.string().trim().min(1).max(1000)).max(10).optional(),
+
 });
 
 export interface ChatSource {
@@ -72,6 +74,78 @@ export async function POST(request: NextRequest) {
 
   try {
     const question = parsed.data.question;
+
+    // Modo de revisão após reprovação no quiz.
+    // Cada questão errada é buscada separadamente para evitar transformar
+    // várias dúvidas diferentes em uma única consulta textual gigante.
+    if (parsed.data.reviewQuestions?.length) {
+      const reviewQuestions = parsed.data.reviewQuestions.slice(0, 10);
+
+      const reviewSearches = await Promise.all(
+        reviewQuestions.map((reviewQuestion) =>
+          searchKnowledgeBase(reviewQuestion, TOP_K)
+        )
+      );
+
+      const byChunkId = new Map<
+        string,
+        (typeof reviewSearches)[number][number]
+      >();
+
+      for (const result of reviewSearches.flat()) {
+        if (result.score < MIN_SCORE_THRESHOLD) continue;
+
+        const current = byChunkId.get(result.chunkId);
+
+        if (!current || result.score > current.score) {
+          byChunkId.set(result.chunkId, result);
+        }
+      }
+
+      const reviewResults = Array.from(byChunkId.values())
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10);
+
+      if (reviewResults.length === 0) {
+        return NextResponse.json({
+          ok: true,
+          answer:
+            "Não consegui localizar material suficiente para revisar essas questões. Tente abrir o material do módulo ou me pergunte sobre um dos assuntos separadamente.",
+          sources: [],
+        });
+      }
+
+      const reviewPrompt = `Ajude o usuário a revisar os assuntos relacionados às questões que ele errou em uma avaliação.
+
+QUESTÕES ERRADAS:
+${reviewQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}
+
+Monte uma revisão didática usando SOMENTE o contexto dos documentos fornecidos.
+
+Regras:
+- Não informe qual alternativa era a correta.
+- Não entregue um gabarito.
+- Explique os conceitos e procedimentos necessários para a pessoa aprender.
+- Organize a revisão em tópicos claros.
+- Quando houver vários assuntos, separe-os.
+- Seja objetivo, mas suficientemente explicativo para ajudar em uma nova tentativa.`;
+
+      const { answer } = await generateAnswer(
+        reviewPrompt,
+        reviewResults.map((r) => ({
+          content: r.content,
+          arquivo: r.arquivo,
+          caminho: r.caminho,
+          pagina: r.pageStart !== null ? String(r.pageStart) : null,
+        }))
+      );
+
+      return NextResponse.json({
+        ok: true,
+        answer,
+        sources: [],
+      });
+    }
 
     // Primeiro tenta a pergunta exatamente como o usuário escreveu.
     const directResults = await searchKnowledgeBase(question, TOP_K);
