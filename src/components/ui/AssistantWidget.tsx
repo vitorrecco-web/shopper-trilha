@@ -70,7 +70,7 @@ export function AssistantWidget() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [quizHelp, setQuizHelp] = useState<{ wrongQuestions: string[]; moduleName: string } | null>(null);
-  const [mascotAttention, setMascotAttention] = useState(false);
+  const [mascotPresenting, setMascotPresenting] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -96,11 +96,7 @@ export function AssistantWidget() {
           : "";
 
       setQuizHelp({ wrongQuestions, moduleName });
-      setMascotAttention(true);
-
-      window.setTimeout(() => {
-        setMascotAttention(false);
-      }, 2200);
+      setMascotPresenting(true);
     }
 
     window.addEventListener("shopper-assistant-quiz-help", handleQuizHelp);
@@ -115,6 +111,7 @@ export function AssistantWidget() {
 
     setQuizHelp(null);
     setOpen(true);
+    setMascotPresenting(true);
 
     const userMessage: ChatMessage = {
       id: `u-review-${Date.now()}`,
@@ -274,7 +271,10 @@ export function AssistantWidget() {
               <span style={{ fontSize: theme.font.size.base, fontWeight: 700 }}>Assistente Shopper Trilha</span>
             </span>
             <button
-              onClick={() => setOpen(false)}
+              onClick={() => {
+                setOpen(false);
+                setMascotPresenting(false);
+              }}
               aria-label="Fechar assistente"
               style={{
                 background: "transparent",
@@ -382,7 +382,7 @@ export function AssistantWidget() {
           style={{
             position: "fixed",
             right: 18,
-            bottom: 92,
+            bottom: 174,
             width: "min(310px, calc(100vw - 36px))",
             background: theme.color.surface,
             border: `1px solid ${theme.color.border}`,
@@ -420,7 +420,10 @@ export function AssistantWidget() {
             </button>
 
             <button
-              onClick={() => setQuizHelp(null)}
+              onClick={() => {
+                setQuizHelp(null);
+                setMascotPresenting(false);
+              }}
               style={{
                 border: `1px solid ${theme.color.border}`,
                 borderRadius: theme.radius.md,
@@ -438,65 +441,119 @@ export function AssistantWidget() {
       )}
 
       <button
-        className={mascotAttention ? "assistant-mascot-attention" : undefined}
-        onClick={() => setOpen((o) => !o)}
+        className={mascotPresenting || open ? "assistant-mascot-stage presenting" : "assistant-mascot-stage"}
+        onClick={() => {
+          const nextOpen = !open;
+          setOpen(nextOpen);
+          setMascotPresenting(nextOpen);
+        }}
         aria-label={open ? "Fechar assistente" : "Abrir Assistente Shopper Trilha"}
         aria-expanded={open}
         style={{
           position: "fixed",
           bottom: 16,
           right: 16,
-          width: 64,
-          height: 64,
+          width: 72,
+          height: mascotPresenting || open ? 138 : 72,
           border: "none",
           padding: 0,
-          // Sem background/overflow:hidden — nada de círculo por trás do
-          // mascote. Assim que a imagem tiver transparência de verdade,
-          // só o mascote aparece flutuando, como pedido.
           background: "transparent",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
           cursor: "pointer",
           zIndex: 900,
+          overflow: "visible",
         }}
       >
-        {/*
-          eslint-disable-next-line @next/next/no-img-element --
-          objectFit: "contain" preserva a proporção e o mascote inteiro
-          (cabeça, antena, laterais) sem cortar nada — diferente do
-          "cover" anterior, que recortava pra preencher um círculo.
-          drop-shadow (não box-shadow) segue o contorno real do mascote
-          em vez de desenhar uma sombra retangular/circular atrás dele.
-        */}
         <img
+          className="assistant-mascot-normal"
           src="/assistant-mascot.png"
           alt=""
-          width={64}
-          height={64}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "contain",
-            display: "block",
-            filter: "drop-shadow(0 4px 10px rgba(15, 23, 20, 0.35))",
-          }}
+          width={72}
+          height={72}
+        />
+
+        <img
+          className="assistant-mascot-full"
+          src="/assistant-mascot-full.png"
+          alt=""
+          width={108}
+          height={138}
         />
       </button>
 
       <style jsx global>{`
-        @keyframes assistantMascotAttention {
-          0%   { transform: translateY(0) rotate(0deg) scale(1); }
-          15%  { transform: translateY(-10px) rotate(-7deg) scale(1.06); }
-          30%  { transform: translateY(0) rotate(7deg) scale(1.03); }
-          45%  { transform: translateY(-7px) rotate(-5deg) scale(1.06); }
-          60%  { transform: translateY(0) rotate(4deg) scale(1.02); }
-          75%  { transform: translateY(-3px) rotate(-2deg) scale(1.03); }
-          100% { transform: translateY(0) rotate(0deg) scale(1); }
+        .assistant-mascot-stage {
+          display: block;
         }
 
-        .assistant-mascot-attention {
-          animation: assistantMascotAttention 1.1s ease-in-out 2;
+        .assistant-mascot-normal,
+        .assistant-mascot-full {
+          position: absolute;
+          right: 0;
+          bottom: 0;
+          object-fit: contain;
+          display: block;
+          filter: drop-shadow(0 4px 10px rgba(15, 23, 20, 0.35));
+          transform-origin: bottom center;
+          transition: opacity 160ms ease;
+        }
+
+        .assistant-mascot-normal {
+          width: 72px;
+          height: 72px;
+          opacity: 1;
+        }
+
+        .assistant-mascot-full {
+          width: 108px;
+          height: 138px;
+          right: -18px;
+          opacity: 0;
+          transform: translateY(78px) scale(0.92);
+          pointer-events: none;
+        }
+
+        .assistant-mascot-stage.presenting .assistant-mascot-normal {
+          opacity: 0;
+        }
+
+        .assistant-mascot-stage.presenting .assistant-mascot-full {
+          opacity: 1;
+          animation:
+            assistantMascotRise 900ms cubic-bezier(0.22, 0.8, 0.28, 1) forwards,
+            assistantMascotWave 650ms ease-in-out 950ms 2;
+        }
+
+        @keyframes assistantMascotRise {
+          0% {
+            transform: translateY(78px) scale(0.92);
+          }
+          55% {
+            transform: translateY(-8px) scale(1.04);
+          }
+          78% {
+            transform: translateY(3px) scale(0.99);
+          }
+          100% {
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        @keyframes assistantMascotWave {
+          0% {
+            transform: translateY(0) rotate(0deg);
+          }
+          25% {
+            transform: translateY(0) rotate(-3deg);
+          }
+          50% {
+            transform: translateY(-2px) rotate(3deg);
+          }
+          75% {
+            transform: translateY(0) rotate(-2deg);
+          }
+          100% {
+            transform: translateY(0) rotate(0deg);
+          }
         }
 
         .assistant-help-bubble {
