@@ -123,6 +123,25 @@ export function QuizClient({ moduleId, moduleHref }: { moduleId: string; moduleH
       }
       setResult(data);
       setPhase("result");
+
+      if (!data.passed) {
+        const wrongQuestions = perguntas
+          .filter((p) => {
+            const questionResult = data.perQuestion.find(
+              (item) => item.questionId === p.id
+            );
+            return questionResult?.correct === false;
+          })
+          .map((p) => p.pergunta);
+
+        window.setTimeout(() => {
+          window.dispatchEvent(
+            new CustomEvent("shopper-assistant-quiz-help", {
+              detail: { wrongQuestions },
+            })
+          );
+        }, 700);
+      }
     } catch {
       setError("Erro de conexão. Tente enviar novamente.");
       setPhase("in-progress");

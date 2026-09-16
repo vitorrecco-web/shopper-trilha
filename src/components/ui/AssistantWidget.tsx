@@ -69,6 +69,8 @@ export function AssistantWidget() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [quizHelp, setQuizHelp] = useState<{ wrongQuestions: string[] } | null>(null);
+  const [mascotAttention, setMascotAttention] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -79,6 +81,46 @@ export function AssistantWidget() {
   useEffect(() => {
     if (open) textareaRef.current?.focus();
   }, [open]);
+
+  useEffect(() => {
+    function handleQuizHelp(event: Event) {
+      const customEvent = event as CustomEvent<{ wrongQuestions?: string[] }>;
+
+      const wrongQuestions = Array.isArray(customEvent.detail?.wrongQuestions)
+        ? customEvent.detail.wrongQuestions
+        : [];
+
+      setQuizHelp({ wrongQuestions });
+      setMascotAttention(true);
+
+      window.setTimeout(() => {
+        setMascotAttention(false);
+      }, 2200);
+    }
+
+    window.addEventListener("shopper-assistant-quiz-help", handleQuizHelp);
+
+    return () => {
+      window.removeEventListener("shopper-assistant-quiz-help", handleQuizHelp);
+    };
+  }, []);
+
+  function handleAcceptQuizHelp() {
+    const questions = quizHelp?.wrongQuestions ?? [];
+
+    const reviewText =
+      questions.length > 0
+        ? `Quero revisar os assuntos relacionados às questões que errei na avaliação: ${questions.join(" | ")}`
+        : "Quero revisar o conteúdo da avaliação em que não atingi a nota mínima.";
+
+    setQuizHelp(null);
+    setOpen(true);
+    setInput(reviewText);
+
+    window.setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 100);
+  }
 
   async function handleSend() {
     const question = input.trim();
@@ -279,7 +321,69 @@ export function AssistantWidget() {
         </div>
       )}
 
+      {quizHelp && !open && (
+        <div
+          className="assistant-help-bubble"
+          style={{
+            position: "fixed",
+            right: 18,
+            bottom: 92,
+            width: "min(310px, calc(100vw - 36px))",
+            background: theme.color.surface,
+            border: `1px solid ${theme.color.border}`,
+            borderRadius: theme.radius.lg,
+            boxShadow: "0 8px 28px rgba(15, 23, 20, 0.18)",
+            padding: 14,
+            zIndex: 901,
+          }}
+        >
+          <p
+            style={{
+              margin: "0 0 10px",
+              color: theme.color.text,
+              fontSize: theme.font.size.sm,
+              lineHeight: 1.45,
+            }}
+          >
+            Vi que algumas questões ficaram difíceis. Quer revisar esse conteúdo comigo?
+          </p>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={handleAcceptQuizHelp}
+              style={{
+                border: "none",
+                borderRadius: theme.radius.md,
+                padding: "8px 12px",
+                background: theme.color.primary,
+                color: "#fff",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Quero ajuda
+            </button>
+
+            <button
+              onClick={() => setQuizHelp(null)}
+              style={{
+                border: `1px solid ${theme.color.border}`,
+                borderRadius: theme.radius.md,
+                padding: "8px 12px",
+                background: theme.color.surface,
+                color: theme.color.textMuted,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Agora não
+            </button>
+          </div>
+        </div>
+      )}
+
       <button
+        className={mascotAttention ? "assistant-mascot-attention" : undefined}
         onClick={() => setOpen((o) => !o)}
         aria-label={open ? "Fechar assistente" : "Abrir Assistente Shopper Trilha"}
         aria-expanded={open}
@@ -326,6 +430,35 @@ export function AssistantWidget() {
       </button>
 
       <style jsx global>{`
+        @keyframes assistantMascotAttention {
+          0%   { transform: translateY(0) rotate(0deg) scale(1); }
+          15%  { transform: translateY(-10px) rotate(-7deg) scale(1.06); }
+          30%  { transform: translateY(0) rotate(7deg) scale(1.03); }
+          45%  { transform: translateY(-7px) rotate(-5deg) scale(1.06); }
+          60%  { transform: translateY(0) rotate(4deg) scale(1.02); }
+          75%  { transform: translateY(-3px) rotate(-2deg) scale(1.03); }
+          100% { transform: translateY(0) rotate(0deg) scale(1); }
+        }
+
+        .assistant-mascot-attention {
+          animation: assistantMascotAttention 1.1s ease-in-out 2;
+        }
+
+        .assistant-help-bubble {
+          animation: assistantHelpBubbleIn 220ms ease-out;
+        }
+
+        @keyframes assistantHelpBubbleIn {
+          from {
+            opacity: 0;
+            transform: translateY(8px) scale(0.97);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
         .assistant-chat-panel {
           height: min(70dvh, 560px);
         }
