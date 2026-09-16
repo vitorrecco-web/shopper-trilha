@@ -36,7 +36,6 @@ const chatSchema = z.object({
     .max(1000, "Pergunta muito longa (máximo de 1000 caracteres)."),
   reviewQuestions: z.array(z.string().trim().min(1).max(1000)).max(10).optional(),
   reviewModule: z.string().trim().max(300).optional(),
-  reviewModule: z.string().trim().max(300).optional(),
 
 });
 
