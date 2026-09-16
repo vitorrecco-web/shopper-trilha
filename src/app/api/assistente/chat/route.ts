@@ -27,7 +27,7 @@ import { generateAnswer, generateSearchQueries, NAO_ENCONTREI, PRECISO_DE_MAIS_C
  */
 const MIN_SCORE_THRESHOLD = 0;
 const TOP_K = 5;
-const REVIEW_SEARCH_TOP_K = 25;
+const REVIEW_SEARCH_TOP_K = 10;
 
 function normalizeSearchText(value: string): string {
   return value
@@ -54,6 +54,12 @@ function getModuleKeywords(moduleName: string): string[] {
     .split(/[^a-z0-9]+/)
     .map((part) => part.trim())
     .filter((part) => part.length >= 4 && !ignored.has(part));
+}
+
+function getProcessKey(moduleName: string): string | undefined {
+  const keywords = getModuleKeywords(moduleName);
+
+  return keywords[0] || undefined;
 }
 
 function resultMatchesModule(
@@ -129,13 +135,14 @@ export async function POST(request: NextRequest) {
     if (parsed.data.reviewQuestions?.length) {
       const reviewQuestions = parsed.data.reviewQuestions.slice(0, 10);
       const reviewModule = parsed.data.reviewModule?.trim() ?? "";
+      const processKey = getProcessKey(reviewModule);
       const reviewSections: string[] = [];
 
       for (let index = 0; index < reviewQuestions.length; index++) {
         const reviewQuestion = reviewQuestions[index];
 
         // 1. Busca direta pela questão.
-        const directResults = await searchKnowledgeBase(reviewQuestion, REVIEW_SEARCH_TOP_K);
+        const directResults = await searchKnowledgeBase(reviewQuestion, REVIEW_SEARCH_TOP_K, processKey);
 
         // 2. Gera formas alternativas de procurar o mesmo assunto.
         const alternativeQueries = await generateSearchQueries(reviewQuestion, reviewModule);
@@ -145,7 +152,7 @@ export async function POST(request: NextRequest) {
           alternativeQueries.length > 0
             ? await Promise.all(
                 alternativeQueries.map((query) =>
-                  searchKnowledgeBase(query, REVIEW_SEARCH_TOP_K)
+                  searchKnowledgeBase(query, REVIEW_SEARCH_TOP_K, processKey)
                 )
               )
             : [];

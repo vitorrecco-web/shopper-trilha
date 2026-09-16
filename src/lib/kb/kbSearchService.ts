@@ -27,7 +27,8 @@ interface KbTextSearchRow {
 
 export async function searchKnowledgeBase(
   query: string,
-  topK = 8
+  topK = 8,
+  processKey?: string
 ): Promise<KbSearchResult[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
@@ -37,6 +38,7 @@ export async function searchKnowledgeBase(
   const { data, error } = await supabase.rpc("kb_search_chunks_text", {
     search_query: trimmed,
     match_count: topK,
+    process_key: processKey?.trim() || null,
   });
 
   if (error) throw error;
