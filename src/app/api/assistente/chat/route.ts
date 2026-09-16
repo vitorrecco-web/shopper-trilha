@@ -27,6 +27,7 @@ import { generateAnswer, generateSearchQueries, NAO_ENCONTREI, PRECISO_DE_MAIS_C
  */
 const MIN_SCORE_THRESHOLD = 0;
 const TOP_K = 5;
+const REVIEW_SEARCH_TOP_K = 25;
 
 function normalizeSearchText(value: string): string {
   return value
@@ -134,7 +135,7 @@ export async function POST(request: NextRequest) {
         const reviewQuestion = reviewQuestions[index];
 
         // 1. Busca direta pela questão.
-        const directResults = await searchKnowledgeBase(reviewQuestion, TOP_K);
+        const directResults = await searchKnowledgeBase(reviewQuestion, REVIEW_SEARCH_TOP_K);
 
         // 2. Gera formas alternativas de procurar o mesmo assunto.
         const alternativeQueries = await generateSearchQueries(reviewQuestion, reviewModule);
@@ -144,7 +145,7 @@ export async function POST(request: NextRequest) {
           alternativeQueries.length > 0
             ? await Promise.all(
                 alternativeQueries.map((query) =>
-                  searchKnowledgeBase(query, TOP_K)
+                  searchKnowledgeBase(query, REVIEW_SEARCH_TOP_K)
                 )
               )
             : [];
