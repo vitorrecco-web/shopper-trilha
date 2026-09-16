@@ -45,7 +45,15 @@ interface SubmitResult {
 
 type Phase = "loading" | "error" | "in-progress" | "submitting" | "result";
 
-export function QuizClient({ moduleId, moduleHref }: { moduleId: string; moduleHref: string }) {
+export function QuizClient({
+  moduleId,
+  moduleHref,
+  moduleName,
+}: {
+  moduleId: string;
+  moduleHref: string;
+  moduleName: string;
+}) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [perguntas, setPerguntas] = useState<PublicPergunta[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -137,7 +145,7 @@ export function QuizClient({ moduleId, moduleHref }: { moduleId: string; moduleH
         window.setTimeout(() => {
           window.dispatchEvent(
             new CustomEvent("shopper-assistant-quiz-help", {
-              detail: { wrongQuestions },
+              detail: { wrongQuestions, moduleName },
             })
           );
         }, 700);

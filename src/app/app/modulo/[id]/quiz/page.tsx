@@ -56,7 +56,7 @@ export default async function QuizPage({ params }: { params: { id: string } }) {
           {access.module.nome}
         </h1>
 
-        <QuizClient moduleId={params.id} moduleHref={moduleHref} />
+        <QuizClient moduleId={params.id} moduleHref={moduleHref} moduleName={access.module.nome} />
       </Container>
     </PageShell>
   );

@@ -69,7 +69,7 @@ export function AssistantWidget() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [quizHelp, setQuizHelp] = useState<{ wrongQuestions: string[] } | null>(null);
+  const [quizHelp, setQuizHelp] = useState<{ wrongQuestions: string[]; moduleName: string } | null>(null);
   const [mascotAttention, setMascotAttention] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -84,13 +84,18 @@ export function AssistantWidget() {
 
   useEffect(() => {
     function handleQuizHelp(event: Event) {
-      const customEvent = event as CustomEvent<{ wrongQuestions?: string[] }>;
+      const customEvent = event as CustomEvent<{ wrongQuestions?: string[]; moduleName?: string }>;
 
       const wrongQuestions = Array.isArray(customEvent.detail?.wrongQuestions)
         ? customEvent.detail.wrongQuestions
         : [];
 
-      setQuizHelp({ wrongQuestions });
+      const moduleName =
+        typeof customEvent.detail?.moduleName === "string"
+          ? customEvent.detail.moduleName
+          : "";
+
+      setQuizHelp({ wrongQuestions, moduleName });
       setMascotAttention(true);
 
       window.setTimeout(() => {
@@ -127,6 +132,7 @@ export function AssistantWidget() {
         body: JSON.stringify({
           question: "Quero revisar os assuntos das questões que errei na avaliação.",
           reviewQuestions: questions,
+          reviewModule: quizHelp?.moduleName ?? "",
         }),
       });
 
