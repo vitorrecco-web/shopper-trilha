@@ -6,8 +6,21 @@ import { z } from "zod";
  * - cada pergunta tem exatamente 4 alternativas (§4);
  * - a resposta correta é vinculada por ID interno, nunca pela posição
  *   visual (§4) — por isso `correta` é validado contra os IDs de
- *   `alternativas`, não contra um índice;
+ *   `alternativas`, nunca contra um índice;
  * - `explicacao` é opcional (§4).
+ *
+ * NOVO — revisão pós-reprovação (Assistente Shopper): três campos
+ * opcionais que indicam qual CONTEÚDO revisar quando o aluno errar essa
+ * pergunta. Nunca guardam gabarito, só "onde estudar":
+ * - `review_topic`: termos de busca (ex: "produto avariado descarte").
+ * - `review_process`: nome do processo/pasta no Drive (ex: "PICKING"),
+ *   usado como `process_key` na busca — restringe a Processos/PICKING/.
+ * - `review_document`: pista do documento a priorizar (ex: "POP
+ *   PICKING") — corresponde por substring normalizado, nunca por nome
+ *   exato de arquivo (os PDFs reais têm nomes irregulares, tipo "Cópia
+ *   de POP PICKING - 07.08.2026.docx.pdf").
+ * Totalmente opcionais — todo `perguntas.json` já publicado continua
+ * validando exatamente igual, sem nenhum backfill necessário.
  */
 
 const alternativaSchema = z.object({
@@ -22,6 +35,9 @@ const perguntaSchema = z
     alternativas: z.array(alternativaSchema).length(4, "cada pergunta precisa ter exatamente 4 alternativas"),
     correta: z.string().min(1),
     explicacao: z.string().optional(),
+    review_topic: z.string().min(1).optional(),
+    review_process: z.string().min(1).optional(),
+    review_document: z.string().min(1).optional(),
   })
   .refine((p) => p.alternativas.some((a) => a.id === p.correta), {
     message: "o campo 'correta' precisa apontar para o id de uma das alternativas",

@@ -20,6 +20,16 @@ export interface PublicPergunta {
   id: string;
   pergunta: string;
   alternativas: PublicAlternativa[];
+  /**
+   * Metadados de revisão (Assistente Shopper) — indicam qual CONTEÚDO
+   * revisar se o aluno errar esta pergunta. Seguros para expor: nunca
+   * revelam qual alternativa é correta, só "qual assunto isto testa" —
+   * exatamente como o próprio enunciado (`pergunta`) já é público.
+   * `correta` NUNCA aparece aqui, em nenhuma circunstância.
+   */
+  reviewTopic?: string;
+  reviewProcess?: string;
+  reviewDocument?: string;
 }
 
 function shuffle<T>(items: T[]): T[] {
@@ -44,13 +54,18 @@ export async function fetchAndValidateQuiz(questionsDriveId: string): Promise<Va
 /**
  * Tarefas 3-5: embaralha perguntas e alternativas a cada chamada, e
  * NUNCA inclui `correta` nem `explicacao` — o gabarito não pode ser
- * exposto antes da submissão.
+ * exposto antes da submissão. Os campos `review_*`, quando presentes,
+ * são copiados como estão (sem embaralhar, são metadados da pergunta
+ * como um todo, não de uma alternativa).
  */
 export function toPublicQuiz(perguntas: ValidatedPerguntas["perguntas"]): PublicPergunta[] {
   return shuffle(perguntas).map((p) => ({
     id: p.id,
     pergunta: p.pergunta,
     alternativas: shuffle(p.alternativas).map((a) => ({ id: a.id, texto: a.texto })),
+    ...(p.review_topic ? { reviewTopic: p.review_topic } : {}),
+    ...(p.review_process ? { reviewProcess: p.review_process } : {}),
+    ...(p.review_document ? { reviewDocument: p.review_document } : {}),
   }));
 }
 

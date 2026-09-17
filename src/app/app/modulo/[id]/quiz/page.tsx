@@ -13,7 +13,7 @@ import { QuizClient } from "./QuizClient";
  * módulo (liberado, material acessado, e para vídeo, percentual
  * mínimo assistido), replicadas aqui só para não deixar a URL acessível
  * "no escuro" antes da hora. A autorização de verdade continua nas
- * rotas de API (`/api/modulos/[id]/quiz`), inalteradas.
+ * rotas de API (/api/modulos/[id]/quiz), inalteradas.
  */
 export default async function QuizPage({ params }: { params: { id: string } }) {
   const session = await getCurrentSession();

@@ -22,6 +22,19 @@ interface ChatMessage {
 }
 
 /**
+ * Uma questão errada no quiz, com os metadados de revisão que ela
+ * carrega (opcionais — perguntas antigas, sem esses campos no
+ * perguntas.json, continuam funcionando: o backend cai no
+ * comportamento de adivinhação por linguagem natural de antes).
+ */
+interface WrongQuestion {
+  question: string;
+  reviewTopic?: string;
+  reviewProcess?: string;
+  reviewDocument?: string;
+}
+
+/**
  * Renderiza apenas o subconjunto de Markdown usado nas respostas do
  * assistente: negrito, listas simples, parágrafos e quebras de linha.
  * Não usa HTML bruto nem dangerouslySetInnerHTML.
@@ -69,7 +82,7 @@ export function AssistantWidget() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [quizHelp, setQuizHelp] = useState<{ wrongQuestions: string[]; moduleName: string } | null>(null);
+  const [quizHelp, setQuizHelp] = useState<{ wrongQuestions: WrongQuestion[]; moduleName: string } | null>(null);
   const [mascotPresenting, setMascotPresenting] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -84,16 +97,33 @@ export function AssistantWidget() {
 
   useEffect(() => {
     function handleQuizHelp(event: Event) {
-      const customEvent = event as CustomEvent<{ wrongQuestions?: string[]; moduleName?: string }>;
+      const customEvent = event as CustomEvent<{ wrongQuestions?: unknown; moduleName?: string }>;
 
-      const wrongQuestions = Array.isArray(customEvent.detail?.wrongQuestions)
+      const rawWrongQuestions = Array.isArray(customEvent.detail?.wrongQuestions)
         ? customEvent.detail.wrongQuestions
         : [];
 
+      // Aceita tanto o formato novo (objetos ricos com metadados de
+      // revisão) quanto, defensivamente, string solta — nunca quebra se
+      // algo mandar o formato antigo por engano.
+      const wrongQuestions: WrongQuestion[] = rawWrongQuestions
+        .map((item): WrongQuestion | null => {
+          if (typeof item === "string") return { question: item };
+          if (item && typeof item === "object" && typeof (item as { question?: unknown }).question === "string") {
+            const obj = item as Record<string, unknown>;
+            return {
+              question: obj.question as string,
+              reviewTopic: typeof obj.reviewTopic === "string" ? obj.reviewTopic : undefined,
+              reviewProcess: typeof obj.reviewProcess === "string" ? obj.reviewProcess : undefined,
+              reviewDocument: typeof obj.reviewDocument === "string" ? obj.reviewDocument : undefined,
+            };
+          }
+          return null;
+        })
+        .filter((q): q is WrongQuestion => q !== null);
+
       const moduleName =
-        typeof customEvent.detail?.moduleName === "string"
-          ? customEvent.detail.moduleName
-          : "";
+        typeof customEvent.detail?.moduleName === "string" ? customEvent.detail.moduleName : "";
 
       setQuizHelp({ wrongQuestions, moduleName });
       setMascotPresenting(true);

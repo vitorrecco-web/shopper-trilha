@@ -10,7 +10,10 @@
         { "id": "d", "texto": "Alternativa D" }
       ],
       "correta": "a",
-      "explicacao": "Opcional: explique por que esta é a resposta correta. Remova este campo se não quiser usar explicação."
+      "explicacao": "Opcional: explique por que esta é a resposta correta. Remova este campo se não quiser usar explicação.",
+      "review_topic": "Opcional (Assistente Shopper): termos de busca para revisão quando o aluno errar esta pergunta — ex: 'produto avariado descarte'. Remova se não quiser revisão automática para esta pergunta.",
+      "review_process": "Opcional: nome do processo/pasta no Drive, ex: 'PICKING' ou 'PACKING' — restringe a busca de revisão a esse processo. Remova para deixar a revisão adivinhar pelo nome do módulo (comportamento atual).",
+      "review_document": "Opcional: pista do documento a priorizar na revisão, ex: 'POP PICKING' — combina por trecho normalizado do nome do arquivo, não precisa ser o nome completo/exato do PDF."
     },
     {
       "id": "q2",

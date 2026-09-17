@@ -25,6 +25,9 @@ interface PublicPergunta {
   id: string;
   pergunta: string;
   alternativas: PublicAlternativa[];
+  reviewTopic?: string;
+  reviewProcess?: string;
+  reviewDocument?: string;
 }
 interface PerQuestionResult {
   questionId: string;
@@ -41,6 +44,23 @@ interface SubmitResult {
   nextModuleId: string | null;
   nextModuleNome: string | null;
   error?: string;
+}
+
+/**
+ * Metadados de revisão de UMA questão errada — propagados junto com o
+ * texto da pergunta pro evento que o AssistantWidget escuta. Antes
+ * (Assistente Shopper) só o texto era mandado; a revisão tinha que
+ * adivinhar o assunto a partir da linguagem natural da pergunta. Agora,
+ * quando a pergunta já tem `review_topic`/`review_process`/
+ * `review_document` no perguntas.json, a busca de revisão usa isso
+ * diretamente — os campos são opcionais, então perguntas antigas (sem
+ * eles) continuam funcionando com o comportamento de adivinhação atual.
+ */
+interface WrongQuestion {
+  question: string;
+  reviewTopic?: string;
+  reviewProcess?: string;
+  reviewDocument?: string;
 }
 
 type Phase = "loading" | "error" | "in-progress" | "submitting" | "result";
@@ -133,14 +153,17 @@ export function QuizClient({
       setPhase("result");
 
       if (!data.passed) {
-        const wrongQuestions = perguntas
+        const wrongQuestions: WrongQuestion[] = perguntas
           .filter((p) => {
-            const questionResult = data.perQuestion.find(
-              (item) => item.questionId === p.id
-            );
+            const questionResult = data.perQuestion.find((item) => item.questionId === p.id);
             return questionResult?.correct === false;
           })
-          .map((p) => p.pergunta);
+          .map((p) => ({
+            question: p.pergunta,
+            reviewTopic: p.reviewTopic,
+            reviewProcess: p.reviewProcess,
+            reviewDocument: p.reviewDocument,
+          }));
 
         window.setTimeout(() => {
           window.dispatchEvent(
