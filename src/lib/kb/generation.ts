@@ -185,7 +185,13 @@ export async function generateAnswer(
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
       contents: [{ role: "user", parts: [{ text: userContent }] }],
-      generationConfig: { temperature: 0.2, maxOutputTokens: 1024 },
+      // BUG CORRIGIDO: 1024 cortava a resposta no meio da frase em
+      // revisões cobrindo várias questões (a revisão do quiz manda
+      // várias perguntas numa única chamada — ver route.ts). 4096 dá
+      // espaço confortável mesmo pra 3-4 questões com explicação cada.
+      // Uma resposta curta de chat normal continua curta — este número
+      // é só um teto, não força a resposta a ficar mais longa.
+      generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
     }),
   });
 
@@ -195,8 +201,17 @@ export async function generateAnswer(
   }
 
   const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
   };
+
+  const finishReason = data.candidates?.[0]?.finishReason;
+  if (finishReason === "MAX_TOKENS") {
+    // Não falha a requisição por isso (o usuário ainda recebe o que já
+    // foi gerado) — só deixa rastro pra investigar se acontecer nas
+    // mesmas condições de novo, com ainda mais questões numa revisão.
+    console.warn("Gemini generateAnswer atingiu maxOutputTokens — resposta pode ter sido cortada.");
+  }
+
   const answer = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
 
   return { answer: answer.trim() || NAO_ENCONTREI };
