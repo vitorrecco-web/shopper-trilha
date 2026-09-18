@@ -126,3 +126,14 @@ export async function deactivateModule(id: string): Promise<void> {
   const { error } = await supabase.from("modules").update({ active: false }).eq("id", id);
   if (error) throw error;
 }
+
+/**
+ * Usado pelo editor visual de perguntas (Admin) depois de salvar um
+ * perguntas.json válido direto no Drive — mantém `has_questions`
+ * coerente sem esperar a próxima sincronização completa da trilha.
+ */
+export async function setModuleHasQuestions(id: string, hasQuestions: boolean): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from("modules").update({ has_questions: hasQuestions }).eq("id", id);
+  if (error) throw error;
+}

@@ -139,3 +139,21 @@ export async function fetchDriveFileAsBuffer(fileId: string): Promise<Buffer> {
   );
   return Buffer.from(res.data as ArrayBuffer);
 }
+
+/**
+ * Sobrescreve o CONTEÚDO de um arquivo já existente no Drive (mesmo
+ * fileId, mesma pasta/nome) — usado pelo editor visual de perguntas
+ * (Admin) para salvar o perguntas.json direto no Drive, sem precisar de
+ * download + upload manual. O Drive mantém histórico de versões do
+ * arquivo automaticamente, então uma sobrescrita indevida ainda pode
+ * ser recuperada pela interface do Drive ("Gerenciar versões").
+ */
+export async function updateDriveFileContent(fileId: string, content: string): Promise<void> {
+  const auth = getAuth();
+  const drive = google.drive({ version: "v3", auth });
+  await drive.files.update({
+    fileId,
+    media: { mimeType: "application/json", body: content },
+    supportsAllDrives: true,
+  });
+}

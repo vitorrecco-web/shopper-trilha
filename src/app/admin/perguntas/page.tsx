@@ -19,8 +19,8 @@ export default async function PerguntasAdminPage() {
         <h1 style={{ fontSize: theme.font.size.xxl, marginTop: 0, marginBottom: 4 }}>Editor de Perguntas</h1>
         <p style={{ color: theme.color.textMuted, fontSize: theme.font.size.sm, marginBottom: theme.space(5) }}>
           Edite e valide o <code>perguntas.json</code> de um módulo sem precisar manipular JSON manualmente.
-          Esta primeira versão não grava de volta no Google Drive — baixe o arquivo validado e faça o upload
-          manual na pasta do módulo.
+          "Salvar no Drive" sobrescreve o arquivo do módulo direto na pasta correspondente — vale imediatamente
+          para o próximo quiz respondido. O botão de backup baixa uma cópia local antes de salvar.
         </p>
         <PerguntasEditorPanel />
       </Container>

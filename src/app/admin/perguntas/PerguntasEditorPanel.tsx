@@ -8,7 +8,10 @@ import { Badge } from "@/components/ui/Badge";
 interface ModuleOption {
   id: string;
   nome: string;
+  ordem: number;
   faseNome: string | null;
+  faseOrdem: number;
+  phaseType: "common" | "specific_track";
   trackNome: string | null;
   hasQuestions: boolean;
   active: boolean;
@@ -31,6 +34,12 @@ interface CarregarResult {
 interface ValidarResult {
   ok: boolean;
   valid?: boolean;
+  error?: string;
+  questionCount?: number;
+}
+
+interface SalvarResult {
+  ok: boolean;
   error?: string;
   questionCount?: number;
 }
@@ -58,6 +67,14 @@ let keyCounter = 0;
 function nextKey(): string {
   keyCounter += 1;
   return `p${keyCounter}-${Date.now()}`;
+}
+
+/** Remove acentos/caixa para busca — usa \p{Diacritic} (ES2018+) em vez de uma faixa de código manual. */
+function normalizeSearch(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
 }
 
 function asString(value: unknown, fallback = ""): string {
@@ -136,6 +153,12 @@ function buildPayload(perguntas: EditorPergunta[]) {
   };
 }
 
+function groupLabelFor(m: ModuleOption): string {
+  return m.phaseType === "common"
+    ? m.faseNome ?? "Sem fase"
+    : `${m.faseNome ?? "Sem fase"} · ${m.trackNome ?? "Sem trilha"}`;
+}
+
 const boxStyle: React.CSSProperties = {
   background: theme.color.surface,
   border: `1px solid ${theme.color.border}`,
@@ -163,14 +186,10 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 600,
 };
 
-function moduleLabel(m: ModuleOption): string {
-  const parts = [m.faseNome, m.trackNome, m.nome].filter(Boolean);
-  return parts.join(" · ");
-}
-
 export function PerguntasEditorPanel() {
   const [modules, setModules] = useState<ModuleOption[] | null>(null);
   const [modulesError, setModulesError] = useState<string | null>(null);
+  const [moduleFilter, setModuleFilter] = useState("");
   const [selectedModuleId, setSelectedModuleId] = useState<string>("");
 
   const [loading, setLoading] = useState(false);
@@ -182,6 +201,10 @@ export function PerguntasEditorPanel() {
   const [validation, setValidation] = useState<{ ok: boolean; error?: string; questionCount?: number } | null>(
     null
   );
+
+  const [confirmingSave, setConfirmingSave] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveResult, setSaveResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -205,6 +228,30 @@ export function PerguntasEditorPanel() {
       cancelled = true;
     };
   }, []);
+
+  // Agrupado por fase (e trilha, quando a fase é específica de trilha) na
+  // ordem real da trilha (já vem ordenada assim da API) — com muitos
+  // módulos, uma lista plana em ordem alfabética torna quase impossível
+  // achar o módulo certo. A busca filtra por fase, trilha ou nome.
+  const moduleGroups = useMemo(() => {
+    if (!modules) return [];
+    const term = normalizeSearch(moduleFilter.trim());
+    const filtered = term
+      ? modules.filter((m) => normalizeSearch(`${m.faseNome ?? ""} ${m.trackNome ?? ""} ${m.nome}`).includes(term))
+      : modules;
+
+    const order: string[] = [];
+    const map = new Map<string, ModuleOption[]>();
+    for (const m of filtered) {
+      const label = groupLabelFor(m);
+      if (!map.has(label)) {
+        map.set(label, []);
+        order.push(label);
+      }
+      map.get(label)!.push(m);
+    }
+    return order.map((label) => ({ label, items: map.get(label)! }));
+  }, [modules, moduleFilter]);
 
   // Validação em tempo real, com debounce — mesma validatePerguntasJson do backend.
   useEffect(() => {
@@ -244,6 +291,8 @@ export function PerguntasEditorPanel() {
     setModuleNome(null);
     setLoadError(null);
     setValidation(null);
+    setSaveResult(null);
+    setConfirmingSave(false);
     if (!moduleId) return;
 
     setLoading(true);
@@ -305,8 +354,35 @@ export function PerguntasEditorPanel() {
     URL.revokeObjectURL(url);
   }
 
-  const hasModules = (modules?.length ?? 0) > 0;
-  const canDownload = Boolean(perguntas && perguntas.length > 0 && validation?.ok);
+  async function handleConfirmSave() {
+    if (!perguntas || !selectedModuleId) return;
+    setSaving(true);
+    setSaveResult(null);
+    try {
+      const res = await fetch("/api/admin/perguntas/salvar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ moduleId: selectedModuleId, perguntas: buildPayload(perguntas) }),
+      });
+      const data: SalvarResult = await res.json();
+      if (!res.ok || !data.ok) {
+        setSaveResult({ ok: false, message: data.error ?? "Não foi possível salvar agora." });
+        return;
+      }
+      const count = data.questionCount ?? perguntas.length;
+      setSaveResult({
+        ok: true,
+        message: `Salvo no Drive com sucesso (${count} pergunta${count === 1 ? "" : "s"}). Já vale para o próximo quiz respondido.`,
+      });
+    } catch {
+      setSaveResult({ ok: false, message: "Erro de conexão ao salvar." });
+    } finally {
+      setSaving(false);
+      setConfirmingSave(false);
+    }
+  }
+
+  const canPublish = Boolean(perguntas && perguntas.length > 0 && validation?.ok);
 
   return (
     <div>
@@ -320,23 +396,78 @@ export function PerguntasEditorPanel() {
         {modules === null && !modulesError ? (
           <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted }}>Carregando módulos...</p>
         ) : (
-          <select
-            value={selectedModuleId}
-            onChange={(e) => handleLoad(e.target.value)}
-            style={{ ...inputStyle, maxWidth: 480 }}
-            disabled={loading}
-          >
-            <option value="">
-              {hasModules ? "Selecione um módulo com quiz..." : "Nenhum módulo com perguntas.json encontrado"}
-            </option>
-            {modules?.map((m) => (
-              <option key={m.id} value={m.id}>
-                {moduleLabel(m)}
-                {!m.hasQuestions ? " (perguntas.json inválido no banco)" : ""}
-                {!m.active ? " (inativo)" : ""}
-              </option>
-            ))}
-          </select>
+          <>
+            <input
+              value={moduleFilter}
+              onChange={(e) => setModuleFilter(e.target.value)}
+              placeholder="Buscar por fase, trilha ou nome do módulo..."
+              style={{ ...inputStyle, marginBottom: 10, maxWidth: 480 }}
+            />
+            <div
+              style={{
+                maxHeight: 320,
+                overflowY: "auto",
+                border: `1px solid ${theme.color.border}`,
+                borderRadius: theme.radius.md,
+              }}
+            >
+              {moduleGroups.length === 0 ? (
+                <p style={{ padding: 12, fontSize: 13, color: theme.color.textMuted, margin: 0 }}>
+                  {modules && modules.length === 0
+                    ? "Nenhum módulo com perguntas.json encontrado."
+                    : "Nenhum módulo encontrado para essa busca."}
+                </p>
+              ) : (
+                moduleGroups.map((group) => (
+                  <div key={group.label}>
+                    <div
+                      style={{
+                        background: theme.color.infoBg,
+                        color: theme.color.infoText,
+                        fontSize: 11.5,
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.3,
+                        padding: "6px 10px",
+                      }}
+                    >
+                      {group.label}
+                    </div>
+                    {group.items.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => handleLoad(m.id)}
+                        disabled={loading}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 8,
+                          width: "100%",
+                          textAlign: "left",
+                          padding: "8px 10px",
+                          fontSize: 13,
+                          fontFamily: "inherit",
+                          border: "none",
+                          borderTop: `1px solid ${theme.color.border}`,
+                          background: m.id === selectedModuleId ? theme.color.primaryLight : "transparent",
+                          color: theme.color.text,
+                          cursor: loading ? "default" : "pointer",
+                        }}
+                      >
+                        <span>{m.nome}</span>
+                        <span style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                          {!m.hasQuestions && <Badge tone="warning">inválido</Badge>}
+                          {!m.active && <Badge tone="neutral">inativo</Badge>}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
+          </>
         )}
       </div>
 
@@ -355,35 +486,89 @@ export function PerguntasEditorPanel() {
           <div
             style={{
               ...boxStyle,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: 12,
               position: "sticky",
               top: 66,
               zIndex: 5,
             }}
           >
-            <div>
-              <b style={{ fontSize: theme.font.size.base, color: theme.color.text }}>
-                {moduleNome ?? "Módulo"} · {perguntas.length} pergunta{perguntas.length === 1 ? "" : "s"}
-              </b>
-              <div style={{ marginTop: 6 }}>
-                {validating ? (
-                  <Badge tone="neutral">Validando...</Badge>
-                ) : validation?.ok ? (
-                  <Badge tone="primary">JSON válido</Badge>
-                ) : validation && !validation.ok ? (
-                  <Badge tone="danger">Inválido: {validation.error}</Badge>
-                ) : (
-                  <Badge tone="neutral">—</Badge>
-                )}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 12,
+              }}
+            >
+              <div>
+                <b style={{ fontSize: theme.font.size.base, color: theme.color.text }}>
+                  {moduleNome ?? "Módulo"} · {perguntas.length} pergunta{perguntas.length === 1 ? "" : "s"}
+                </b>
+                <div style={{ marginTop: 6 }}>
+                  {validating ? (
+                    <Badge tone="neutral">Validando...</Badge>
+                  ) : validation?.ok ? (
+                    <Badge tone="primary">JSON válido</Badge>
+                  ) : validation && !validation.ok ? (
+                    <Badge tone="danger">Inválido: {validation.error}</Badge>
+                  ) : (
+                    <Badge tone="neutral">—</Badge>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Button variant="secondary" onClick={handleDownload} disabled={!canPublish}>
+                  Baixar backup (.json)
+                </Button>
+                <Button onClick={() => setConfirmingSave(true)} disabled={!canPublish || saving || confirmingSave}>
+                  {saving ? "Salvando..." : "Salvar no Drive"}
+                </Button>
               </div>
             </div>
-            <Button onClick={handleDownload} disabled={!canDownload}>
-              Baixar perguntas.json
-            </Button>
+
+            {confirmingSave && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 12,
+                  borderRadius: theme.radius.md,
+                  background: theme.color.warningBg,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <span style={{ fontSize: 13, color: theme.color.text }}>
+                  Isso sobrescreve o perguntas.json atual deste módulo direto no Drive — vale imediatamente para
+                  quem responder o quiz. Confirmar?
+                </span>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Button onClick={handleConfirmSave} disabled={saving}>
+                    {saving ? "Salvando..." : "Confirmar"}
+                  </Button>
+                  <Button variant="secondary" onClick={() => setConfirmingSave(false)} disabled={saving}>
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {saveResult && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 12,
+                  borderRadius: theme.radius.md,
+                  background: saveResult.ok ? theme.color.primaryLight : theme.color.dangerBg,
+                  color: saveResult.ok ? theme.color.primaryDark : theme.color.danger,
+                  fontSize: 13,
+                }}
+              >
+                {saveResult.message}
+              </div>
+            )}
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: theme.space(3) }}>
