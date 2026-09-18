@@ -54,3 +54,16 @@ export async function listAttemptsForUserModule(
   if (error) throw error;
   return data as QuizAttempt[];
 }
+
+/**
+ * Usado pelo dashboard gerencial (Admin) — precisa de todas as
+ * tentativas para agregar desempenho por módulo e ranking de perguntas
+ * mais erradas a partir do `questions_snapshot` histórico, não do
+ * perguntas.json atual no Drive.
+ */
+export async function listAllAttempts(): Promise<QuizAttempt[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.from("quiz_attempts").select("*");
+  if (error) throw error;
+  return data as QuizAttempt[];
+}

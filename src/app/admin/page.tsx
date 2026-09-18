@@ -54,26 +54,24 @@ export default async function AdminHomePage() {
               Documentos e busca usados pelo Assistente Shopper Trilha
             </p>
           </ClickableCard>
-        </div>
 
-        {/*
-          Espaço reservado para o dashboard gerencial futuro (total de
-          colaboradores, % médio de conclusão, notas médias, evolução de
-          conclusões, desempenho por módulo, módulos com maior reprovação).
-          Nenhum dado fictício é exibido — a seção fica sem números até
-          que o analytics real seja implementado numa próxima etapa.
-        */}
-        <div
-          style={{
-            border: `1px dashed ${theme.color.border}`,
-            borderRadius: theme.radius.lg,
-            padding: theme.space(5),
-            textAlign: "center",
-          }}
-        >
-          <p style={{ fontSize: theme.font.size.sm, color: theme.color.textFaint, margin: 0 }}>
-            Indicadores gerenciais (conclusão média, notas, evolução por módulo) — em breve.
-          </p>
+          <ClickableCard href="/admin/perguntas">
+            <h2 style={{ fontSize: theme.font.size.md, margin: 0, marginBottom: 6, color: theme.color.text }}>
+              Editor de Perguntas
+            </h2>
+            <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: 0 }}>
+              Editar e validar o perguntas.json dos módulos sem manipular JSON manualmente
+            </p>
+          </ClickableCard>
+
+          <ClickableCard href="/admin/indicadores">
+            <h2 style={{ fontSize: theme.font.size.md, margin: 0, marginBottom: 6, color: theme.color.text }}>
+              Indicadores
+            </h2>
+            <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: 0 }}>
+              Conclusão média, desempenho por módulo e perguntas mais erradas
+            </p>
+          </ClickableCard>
         </div>
       </Container>
     </PageShell>

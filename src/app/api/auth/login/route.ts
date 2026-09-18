@@ -31,7 +31,7 @@ function getClientIp(request: NextRequest): string {
  */
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
-  const rateLimit = checkLoginRateLimit(ip);
+  const rateLimit = await checkLoginRateLimit(ip);
   if (!rateLimit.allowed) {
     return NextResponse.json(
       { ok: false, error: "Muitas tentativas de login. Tente novamente em alguns minutos." },

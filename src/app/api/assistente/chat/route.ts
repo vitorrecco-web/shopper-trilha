@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Não autenticado." }, { status: 401 });
   }
 
-  const rate = checkChatRateLimit(session.userId);
+  const rate = await checkChatRateLimit(session.userId);
   if (!rate.allowed) {
     const message =
       rate.reason === "global"
