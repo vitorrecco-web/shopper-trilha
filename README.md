@@ -73,13 +73,20 @@ Plataforma online de capacitação de supervisores. Ver `PROJECT_CONTEXT.md` par
 4. Se a tela de consentimento OAuth do projeto estiver em modo "Teste", adicione como usuário de teste o e-mail da conta corporativa que você vai usar no passo 6 (Tela de consentimento OAuth → Usuários de teste).
 5. Abra o [Google OAuth Playground](https://developers.google.com/oauthplayground).
 6. No ícone de engrenagem (canto superior direito): marque **"Use your own OAuth credentials"** e cole o Client ID e Client Secret do passo 3.
-7. Na coluna da esquerda ("Step 1"), no campo de escopo, cole `https://www.googleapis.com/auth/drive.readonly` e clique **Authorize APIs**.
+7. Na coluna da esquerda ("Step 1"), no campo de escopo, cole `https://www.googleapis.com/auth/drive` (escopo de leitura **e escrita** — necessário desde o editor visual de perguntas em `/admin/perguntas`, que salva o `perguntas.json` de volta no Drive; `drive.readonly` não é suficiente e faz `POST /api/admin/perguntas/salvar` devolver erro de permissão) e clique **Authorize APIs**.
 8. Faça login com a **conta corporativa que já tem acesso à pasta "Trilha de Liderança"** (o seu usuário Shopper, por exemplo) e aceite o consentimento.
 9. De volta ao Playground, clique **Exchange authorization code for tokens** ("Step 2"). Copie o **Refresh token** exibido → vira `GOOGLE_OAUTH_REFRESH_TOKEN`.
 10. Pegue o ID da pasta raiz "Trilha de Liderança" pela URL do Drive (`.../folders/`**`ESSE_ID_AQUI`**) → vira `GOOGLE_DRIVE_ROOT_FOLDER_ID`.
 11. Adicione as 4 variáveis no `.env.local` (e depois na Vercel, em Project Settings → Environment Variables).
 
 Nenhum compartilhamento novo de pasta é necessário — a conta usada no passo 8 já enxerga a pasta normalmente.
+
+> **Já tinha um `GOOGLE_OAUTH_REFRESH_TOKEN` gerado antes do editor de
+> perguntas?** Ele foi gerado com o escopo antigo `drive.readonly` e
+> **não** funciona para salvar — refaça os passos 5-9 acima com o
+> escopo `https://www.googleapis.com/auth/drive` e substitua o valor de
+> `GOOGLE_OAUTH_REFRESH_TOKEN` no `.env.local` e na Vercel (Project
+> Settings → Environment Variables), depois faça um novo deploy.
 
 **Fase 5 — Sincronização com prévia e confirmação**
 - `src/lib/sync/diffTrilha.ts` — lógica pura que compara a árvore lida do Drive contra o snapshot atual do banco (tracks/phases/modules, incluindo inativos) e produz a lista de mudanças (`added`/`removed`/`renamed`/`reordered`/`updated`) + avisos. Testada com um fixture cobrindo os 5 tipos de mudança simultaneamente (trilha nova, trilha removida, fase renomeada, módulo renomeado+reordenado+PDF trocado no mesmo módulo, módulo que ganhou perguntas, e o caso de "nada mudou") — 15/15 asserções passando.

@@ -67,3 +67,11 @@ export async function listAllAttempts(): Promise<QuizAttempt[]> {
   if (error) throw error;
   return data as QuizAttempt[];
 }
+
+/** Detalhe por colaborador de um módulo específico — drill-down do dashboard gerencial. */
+export async function listAttemptsForModule(moduleId: string): Promise<QuizAttempt[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.from("quiz_attempts").select("*").eq("module_id", moduleId);
+  if (error) throw error;
+  return data as QuizAttempt[];
+}

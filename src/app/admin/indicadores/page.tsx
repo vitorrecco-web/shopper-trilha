@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { getCurrentSession } from "@/lib/auth/getSession";
 import { getDashboardData } from "@/lib/services/dashboardService";
 import { theme } from "@/lib/ui/theme";
@@ -49,7 +50,7 @@ export default async function IndicadoresPage() {
         <Breadcrumb items={[{ label: "Painel do Gestor", href: "/admin" }, { label: "Indicadores" }]} />
         <h1 style={{ fontSize: theme.font.size.xxl, marginTop: 0, marginBottom: 4 }}>Indicadores</h1>
         <p style={{ color: theme.color.textMuted, fontSize: theme.font.size.sm, marginBottom: theme.space(5) }}>
-          Visão gerencial agregada — sem desempenho individual de colaboradores nesta primeira versão.
+          Clique no nome de um módulo para ver o desempenho por colaborador nele.
         </p>
 
         <div
@@ -109,7 +110,14 @@ export default async function IndicadoresPage() {
                 <tbody>
                   {data.modulePerformance.map((m) => (
                     <tr key={m.moduleId} style={{ borderTop: `1px solid ${theme.color.border}` }}>
-                      <td style={{ padding: "8px", color: theme.color.text, fontWeight: 600 }}>{m.moduleNome}</td>
+                      <td style={{ padding: "8px", fontWeight: 600 }}>
+                        <Link
+                          href={`/admin/indicadores/modulo/${m.moduleId}`}
+                          style={{ color: theme.color.primaryDark, textDecoration: "none" }}
+                        >
+                          {m.moduleNome}
+                        </Link>
+                      </td>
                       <td style={{ padding: "8px" }}>{m.attempts}</td>
                       <td style={{ padding: "8px" }}>{m.uniqueUsers}</td>
                       <td style={{ padding: "8px" }}>{m.avgScore}%</td>

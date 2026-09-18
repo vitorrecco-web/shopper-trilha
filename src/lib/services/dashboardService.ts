@@ -1,7 +1,7 @@
 import "server-only";
-import { listUsers } from "@/lib/repositories/usersRepository";
-import { listAllModules } from "@/lib/repositories/modulesRepository";
-import { listAllAttempts } from "@/lib/repositories/quizAttemptsRepository";
+import { listUsers, listUsersWithTrack } from "@/lib/repositories/usersRepository";
+import { listAllModules, getModuleById } from "@/lib/repositories/modulesRepository";
+import { listAllAttempts, listAttemptsForModule } from "@/lib/repositories/quizAttemptsRepository";
 import { computeUsersProgressBatch } from "@/lib/services/userProgress";
 
 /**
@@ -155,4 +155,92 @@ export async function getDashboardData(): Promise<DashboardData> {
     modulePerformance,
     topWrongQuestions,
   };
+}
+
+export interface ModuleUserRow {
+  userId: string;
+  nomeCompleto: string;
+  trackNome: string | null;
+  attempts: number;
+  bestScore: number;
+  lastScore: number;
+  passed: boolean;
+  lastAttemptAt: string | null;
+}
+
+export interface ModuleUserBreakdown {
+  moduleId: string;
+  moduleNome: string;
+  rows: ModuleUserRow[];
+}
+
+/**
+ * Drill-down do dashboard — "por qual usuário" um módulo tem taxa de
+ * aprovação baixa. Só é acessado a partir de /admin/indicadores (admin
+ * já teria essa visão em /admin/usuarios de qualquer forma); mesmo
+ * assim, mostra só nome/trilha/desempenho, nunca CPF/e-mail/telefone.
+ */
+export async function getModuleUserBreakdown(moduleId: string): Promise<ModuleUserBreakdown | null> {
+  const [module_, attempts, usersWithTrack] = await Promise.all([
+    getModuleById(moduleId),
+    listAttemptsForModule(moduleId),
+    listUsersWithTrack(),
+  ]);
+
+  if (!module_) return null;
+
+  const userById = new Map(usersWithTrack.map((u) => [u.id, u]));
+
+  const byUser = new Map<
+    string,
+    { attempts: number; bestScore: number; lastScore: number; lastAt: string; passed: boolean }
+  >();
+
+  for (const attempt of attempts) {
+    const attemptAt = attempt.submitted_at ?? attempt.started_at;
+    const score = Number(attempt.score);
+    const current = byUser.get(attempt.user_id);
+
+    if (!current) {
+      byUser.set(attempt.user_id, {
+        attempts: 1,
+        bestScore: score,
+        lastScore: score,
+        lastAt: attemptAt,
+        passed: attempt.passed,
+      });
+      continue;
+    }
+
+    current.attempts += 1;
+    current.bestScore = Math.max(current.bestScore, score);
+    current.passed = current.passed || attempt.passed;
+    if (attemptAt > current.lastAt) {
+      current.lastAt = attemptAt;
+      current.lastScore = score;
+    }
+  }
+
+  const rows: ModuleUserRow[] = [...byUser.entries()].map(([userId, agg]) => {
+    const user = userById.get(userId);
+    return {
+      userId,
+      nomeCompleto: user?.nome_completo ?? "Usuário removido",
+      trackNome: user?.track?.nome ?? null,
+      attempts: agg.attempts,
+      bestScore: agg.bestScore,
+      lastScore: agg.lastScore,
+      passed: agg.passed,
+      lastAttemptAt: agg.lastAt,
+    };
+  });
+
+  // Quem ainda não passou, com a menor nota, aparece primeiro — é quem
+  // provavelmente precisa de ajuda.
+  rows.sort((a, b) => {
+    if (a.passed !== b.passed) return a.passed ? 1 : -1;
+    return a.bestScore - b.bestScore;
+  });
+
+  return { moduleId: module_.id, moduleNome: module_.nome, rows };
 }
