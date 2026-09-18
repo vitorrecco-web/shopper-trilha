@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentSession } from "@/lib/auth/getSession";
-import { getDashboardData } from "@/lib/services/dashboardService";
+import { getDashboardOverview } from "@/lib/services/dashboardService";
+import { trackStatusLabel } from "@/lib/services/trackStatus";
 import { theme } from "@/lib/ui/theme";
 import { Header } from "@/components/ui/Header";
 import { PageShell, Container } from "@/components/ui/Container";
@@ -23,6 +24,15 @@ const statCardStyle: React.CSSProperties = {
   textAlign: "center",
 };
 
+const sectionHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 12,
+};
+
+const linkStyle: React.CSSProperties = { color: theme.color.primaryDark, textDecoration: "none", fontWeight: 600 };
+
 function passRateTone(passRate: number): "primary" | "warning" | "danger" {
   if (passRate >= 70) return "primary";
   if (passRate >= 40) return "warning";
@@ -40,8 +50,7 @@ export default async function IndicadoresPage() {
   if (!session) redirect("/login");
   if (session.role !== "admin") redirect("/app");
 
-  const data = await getDashboardData();
-  const totalAttempts = data.modulePerformance.reduce((sum, m) => sum + m.attempts, 0);
+  const data = await getDashboardOverview();
 
   return (
     <PageShell>
@@ -50,7 +59,8 @@ export default async function IndicadoresPage() {
         <Breadcrumb items={[{ label: "Painel do Gestor", href: "/admin" }, { label: "Indicadores" }]} />
         <h1 style={{ fontSize: theme.font.size.xxl, marginTop: 0, marginBottom: 4 }}>Indicadores</h1>
         <p style={{ color: theme.color.textMuted, fontSize: theme.font.size.sm, marginBottom: theme.space(5) }}>
-          Clique no nome de um módulo para ver o desempenho por colaborador nele.
+          Visão geral. Cada seção abaixo mostra só os 5 que mais precisam de atenção — use "ver todos" para a
+          lista completa, com busca e filtros.
         </p>
 
         <div
@@ -71,6 +81,14 @@ export default async function IndicadoresPage() {
           </div>
           <div style={statCardStyle}>
             <div style={{ fontSize: theme.font.size.xxl, fontWeight: 700, color: theme.color.text }}>
+              {data.overallPassRate !== null ? `${data.overallPassRate}%` : "—"}
+            </div>
+            <div style={{ fontSize: theme.font.size.xs, color: theme.color.textMuted, marginTop: 4 }}>
+              Taxa de aprovação geral (todas as provas)
+            </div>
+          </div>
+          <div style={statCardStyle}>
+            <div style={{ fontSize: theme.font.size.xxl, fontWeight: 700, color: theme.color.text }}>
               {data.eligibleUsers}
             </div>
             <div style={{ fontSize: theme.font.size.xs, color: theme.color.textMuted, marginTop: 4 }}>
@@ -79,7 +97,7 @@ export default async function IndicadoresPage() {
           </div>
           <div style={statCardStyle}>
             <div style={{ fontSize: theme.font.size.xxl, fontWeight: 700, color: theme.color.text }}>
-              {totalAttempts}
+              {data.totalAttempts}
             </div>
             <div style={{ fontSize: theme.font.size.xs, color: theme.color.textMuted, marginTop: 4 }}>
               Tentativas de quiz registradas
@@ -88,11 +106,66 @@ export default async function IndicadoresPage() {
         </div>
 
         <div style={boxStyle}>
-          <h2 style={{ fontSize: theme.font.size.md, marginTop: 0, marginBottom: 12, color: theme.color.text }}>
-            Desempenho por módulo
-          </h2>
-          {data.modulePerformance.length === 0 ? (
-            <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted }}>
+          <div style={sectionHeaderStyle}>
+            <h2 style={{ fontSize: theme.font.size.md, margin: 0, color: theme.color.text }}>
+              Colaboradores que precisam de atenção
+            </h2>
+            <Link href="/admin/indicadores/colaboradores" style={linkStyle}>
+              Ver todos →
+            </Link>
+          </div>
+          {data.attentionColaboradores.length === 0 ? (
+            <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: 0 }}>
+              Ninguém travado em nenhum módulo agora — bom sinal.
+            </p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {data.attentionColaboradores.map((c) => (
+                <div
+                  key={c.userId}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 8,
+                    borderTop: `1px solid ${theme.color.border}`,
+                    paddingTop: 8,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div>
+                    <Link href={`/admin/indicadores/colaborador/${c.userId}`} style={linkStyle}>
+                      {c.nomeCompleto}
+                    </Link>
+                    <span style={{ fontSize: 12, color: theme.color.textFaint, marginLeft: 8 }}>
+                      {c.trackNome ?? "—"} · {trackStatusLabel[c.trackStatus]}
+                    </span>
+                  </div>
+                  <span style={{ display: "flex", gap: 6 }}>
+                    {c.modulesFailingOnly > 0 && (
+                      <Badge tone="danger">
+                        {c.modulesFailingOnly} módulo{c.modulesFailingOnly === 1 ? "" : "s"} sem passar
+                      </Badge>
+                    )}
+                    <Badge tone="neutral">{c.completionPercent !== null ? `${c.completionPercent}% concluído` : "—"}</Badge>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={boxStyle}>
+          <div style={sectionHeaderStyle}>
+            <h2 style={{ fontSize: theme.font.size.md, margin: 0, color: theme.color.text }}>
+              Módulos que precisam de atenção
+            </h2>
+            <Link href="/admin/indicadores/modulos" style={linkStyle}>
+              Ver todos →
+            </Link>
+          </div>
+          {data.attentionModules.length === 0 ? (
+            <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: 0 }}>
               Nenhuma tentativa de quiz registrada ainda.
             </p>
           ) : (
@@ -108,13 +181,10 @@ export default async function IndicadoresPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.modulePerformance.map((m) => (
+                  {data.attentionModules.map((m) => (
                     <tr key={m.moduleId} style={{ borderTop: `1px solid ${theme.color.border}` }}>
                       <td style={{ padding: "8px", fontWeight: 600 }}>
-                        <Link
-                          href={`/admin/indicadores/modulo/${m.moduleId}`}
-                          style={{ color: theme.color.primaryDark, textDecoration: "none" }}
-                        >
+                        <Link href={`/admin/indicadores/modulo/${m.moduleId}`} style={linkStyle}>
                           {m.moduleNome}
                         </Link>
                       </td>
@@ -133,11 +203,16 @@ export default async function IndicadoresPage() {
         </div>
 
         <div style={boxStyle}>
-          <h2 style={{ fontSize: theme.font.size.md, marginTop: 0, marginBottom: 12, color: theme.color.text }}>
-            Perguntas mais erradas
-          </h2>
+          <div style={sectionHeaderStyle}>
+            <h2 style={{ fontSize: theme.font.size.md, margin: 0, color: theme.color.text }}>
+              Perguntas mais erradas
+            </h2>
+            <Link href="/admin/indicadores/perguntas" style={linkStyle}>
+              Ver todas →
+            </Link>
+          </div>
           {data.topWrongQuestions.length === 0 ? (
-            <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted }}>
+            <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: 0 }}>
               Nenhum erro registrado ainda.
             </p>
           ) : (

@@ -1,18 +1,12 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getCurrentSession } from "@/lib/auth/getSession";
-import { getModuleUserBreakdown, getAllWrongQuestions } from "@/lib/services/dashboardService";
+import { getUserModuleHistory } from "@/lib/services/dashboardService";
 import { theme } from "@/lib/ui/theme";
 import { Header } from "@/components/ui/Header";
 import { PageShell, Container } from "@/components/ui/Container";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { Badge } from "@/components/ui/Badge";
-
-function errorRateTone(errorRate: number): "danger" | "warning" | "neutral" {
-  if (errorRate >= 60) return "danger";
-  if (errorRate >= 30) return "warning";
-  return "neutral";
-}
 
 const boxStyle: React.CSSProperties = {
   background: theme.color.surface,
@@ -27,15 +21,12 @@ function formatDate(iso: string | null): string {
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
-export default async function ModuloIndicadorPage({ params }: { params: { id: string } }) {
+export default async function ColaboradorIndicadorPage({ params }: { params: { id: string } }) {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
   if (session.role !== "admin") redirect("/app");
 
-  const [data, wrongQuestions] = await Promise.all([
-    getModuleUserBreakdown(params.id),
-    getAllWrongQuestions(params.id),
-  ]);
+  const data = await getUserModuleHistory(params.id);
   if (!data) notFound();
 
   return (
@@ -46,27 +37,30 @@ export default async function ModuloIndicadorPage({ params }: { params: { id: st
           items={[
             { label: "Painel do Gestor", href: "/admin" },
             { label: "Indicadores", href: "/admin/indicadores" },
-            { label: "Módulos", href: "/admin/indicadores/modulos" },
-            { label: data.moduleNome },
+            { label: "Colaboradores", href: "/admin/indicadores/colaboradores" },
+            { label: data.nomeCompleto },
           ]}
         />
-        <h1 style={{ fontSize: theme.font.size.xxl, marginTop: 0, marginBottom: 4 }}>{data.moduleNome}</h1>
+        <h1 style={{ fontSize: theme.font.size.xxl, marginTop: 0, marginBottom: 4 }}>{data.nomeCompleto}</h1>
         <p style={{ color: theme.color.textMuted, fontSize: theme.font.size.sm, marginBottom: theme.space(5) }}>
-          Desempenho por colaborador neste módulo — quem ainda não passou aparece primeiro.
+          {data.trackNome ?? "Sem trilha"} · Desempenho em quiz por módulo — quem ainda não passou aparece
+          primeiro.{" "}
+          <Link href={`/admin/usuarios/${data.userId}`} style={{ color: theme.color.primaryDark }}>
+            Ver cadastro completo →
+          </Link>
         </p>
 
         <div style={boxStyle}>
           {data.rows.length === 0 ? (
             <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: 0 }}>
-              Nenhuma tentativa registrada neste módulo ainda.
+              Este colaborador ainda não tentou nenhum quiz.
             </p>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr style={{ textAlign: "left", color: theme.color.textFaint, fontSize: theme.font.size.xs }}>
-                    <th style={{ padding: "6px 8px" }}>Colaborador</th>
-                    <th style={{ padding: "6px 8px" }}>Trilha</th>
+                    <th style={{ padding: "6px 8px" }}>Módulo</th>
                     <th style={{ padding: "6px 8px" }}>Tentativas</th>
                     <th style={{ padding: "6px 8px" }}>Melhor nota</th>
                     <th style={{ padding: "6px 8px" }}>Última nota</th>
@@ -76,16 +70,15 @@ export default async function ModuloIndicadorPage({ params }: { params: { id: st
                 </thead>
                 <tbody>
                   {data.rows.map((row) => (
-                    <tr key={row.userId} style={{ borderTop: `1px solid ${theme.color.border}` }}>
+                    <tr key={row.moduleId} style={{ borderTop: `1px solid ${theme.color.border}` }}>
                       <td style={{ padding: "8px", fontWeight: 600 }}>
                         <Link
-                          href={`/admin/indicadores/colaborador/${row.userId}`}
+                          href={`/admin/indicadores/modulo/${row.moduleId}`}
                           style={{ color: theme.color.primaryDark, textDecoration: "none" }}
                         >
-                          {row.nomeCompleto}
+                          {row.moduleNome}
                         </Link>
                       </td>
-                      <td style={{ padding: "8px" }}>{row.trackNome ?? "—"}</td>
                       <td style={{ padding: "8px" }}>{row.attempts}</td>
                       <td style={{ padding: "8px" }}>{row.bestScore}%</td>
                       <td style={{ padding: "8px" }}>{row.lastScore}%</td>
@@ -101,33 +94,6 @@ export default async function ModuloIndicadorPage({ params }: { params: { id: st
                   ))}
                 </tbody>
               </table>
-            </div>
-          )}
-        </div>
-
-        <h2 style={{ fontSize: theme.font.size.md, marginTop: theme.space(5), marginBottom: 12, color: theme.color.text }}>
-          Perguntas mais erradas deste módulo
-        </h2>
-        <div style={boxStyle}>
-          {wrongQuestions.length === 0 ? (
-            <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: 0 }}>
-              Nenhum erro registrado neste módulo ainda.
-            </p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {wrongQuestions.map((q) => (
-                <div key={q.questionId} style={{ borderTop: `1px solid ${theme.color.border}`, paddingTop: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 13, color: theme.color.text, fontWeight: 600 }}>
-                      {q.pergunta || `Pergunta ${q.questionId}`}
-                    </span>
-                    <Badge tone={errorRateTone(q.errorRate)}>{q.errorRate}% de erro</Badge>
-                  </div>
-                  <div style={{ fontSize: 12, color: theme.color.textFaint, marginTop: 2 }}>
-                    {q.totalWrong} de {q.totalAnswered} respostas erradas
-                  </div>
-                </div>
-              ))}
             </div>
           )}
         </div>
