@@ -23,7 +23,7 @@ export default async function UsuariosPage() {
   // Sob a base real de produção isso é candidato a estourar limite de
   // conexão/timeout. Agora: 2 consultas no total, para qualquer N.
   const progressByUserId = await computeUsersProgressBatch(
-    users.map((u) => ({ id: u.id, track_id: u.track_id }))
+    users.map((u) => ({ id: u.id, program_id: u.program_id, track_id: u.track_id }))
   );
 
   const rows: UserRow[] = users.map((u) => {
@@ -33,6 +33,7 @@ export default async function UsuariosPage() {
       nome_completo: u.nome_completo,
       matricula: u.matricula,
       login: u.login,
+      program_nome: u.program?.nome ?? "—",
       track_id: u.track_id,
       track_nome: u.track?.nome ?? "—",
       cd: u.cd,

@@ -21,12 +21,12 @@ import { unlockNextModule } from "@/lib/services/progressionService";
  */
 async function authorize(
   moduleId: string
-): Promise<{ user: User; access: ModuleAccessInfo } | { error: NextResponse }> {
+): Promise<{ user: User & { program_id: string }; access: ModuleAccessInfo } | { error: NextResponse }> {
   const auth = await requireActiveUserOrRespond();
   if ("response" in auth) return { error: auth.response };
   const { user } = auth;
 
-  const access = await getModuleAccessInfo(user.id, user.track_id, moduleId);
+  const access = await getModuleAccessInfo(user.id, user.program_id, user.track_id, moduleId);
   if (!access || !access.unlocked || !access.module.has_questions || !access.module.questions_drive_id) {
     return { error: NextResponse.json({ ok: false, error: "Quiz não disponível." }, { status: 404 }) };
   }
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   // só aumenta best_score e nunca desmarca completed).
   if (result.passed) {
     await markPassedAndMaybeUpdateBestScore(user.id, access.module.id, result.score);
-    await unlockNextModule(user.id, user.track_id, access.module.id);
+    await unlockNextModule(user.id, user.program_id, user.track_id, access.module.id);
   }
 
   return NextResponse.json({

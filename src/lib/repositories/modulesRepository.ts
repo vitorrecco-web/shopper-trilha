@@ -9,47 +9,30 @@ import type { Module } from "@/lib/db/types";
  * vive na camada de serviço (Fase 6/7), não aqui.
  */
 
-export async function listActiveModulesForTrack(trackId: string | null): Promise<Module[]> {
+/**
+ * TODOS os módulos ativos de UM Programa (independente de função/track) —
+ * base para `listActiveModulesForTrack` e para o batch de progresso
+ * (`computeUsersProgressBatch`). Módulos não têm `program_id` direto
+ * (só via `phase_id`), então o filtro passa pela fase com `!inner` para
+ * poder usar `.eq()` no campo embutido.
+ */
+export async function listActiveModulesForProgram(programId: string): Promise<Module[]> {
   const supabase = getSupabaseServerClient();
-  let query = supabase.from("modules").select("*").eq("active", true);
+  const { data, error } = await supabase
+    .from("modules")
+    .select("*, phase:phases!inner(program_id)")
+    .eq("active", true)
+    .eq("phase.program_id", programId)
+    .order("ordem", { ascending: true });
 
-  // Módulos comuns (track_id null) + módulos específicos da trilha do usuário.
-  query = trackId ? query.or(`track_id.is.null,track_id.eq.${trackId}`) : query.is("track_id", null);
-
-  const { data, error } = await query.order("ordem", { ascending: true });
   if (error) throw error;
-  return data as Module[];
+  return (data as (Module & { phase: { program_id: string } })[]).map(({ phase: _phase, ...m }) => m as Module);
 }
 
-/**
- * Versão em lote de `listActiveModulesForTrack` — busca, com um NÚMERO
- * FIXO de consultas (2, não N), os módulos comuns + os de todas as
- * trilhas informadas. Usada por `/admin/usuarios` para eliminar o N+1
- * que existia ali (2 consultas por usuário listado).
- *
- * Deliberadamente NÃO usa `.or("track_id.in.(...)")` construído à mão —
- * essa sintaxe combinando `.or()` com uma lista `.in.()` dentro da
- * string é frágil e não teria como ser validada contra um Postgrest
- * real neste ambiente; qualquer erro de sintaxe ali derrubaria a
- * página inteira. Duas chamadas nativas do supabase-js (`.is()` e
- * `.in()`) combinadas em memória são mais simples e confiáveis.
- */
-export async function listActiveModulesForTrackIds(trackIds: string[]): Promise<Module[]> {
-  const supabase = getSupabaseServerClient();
-
-  const [commonResult, trackResult] = await Promise.all([
-    supabase.from("modules").select("*").eq("active", true).is("track_id", null),
-    trackIds.length > 0
-      ? supabase.from("modules").select("*").eq("active", true).in("track_id", trackIds)
-      : Promise.resolve({ data: [] as Module[], error: null }),
-  ]);
-
-  if (commonResult.error) throw commonResult.error;
-  if (trackResult.error) throw trackResult.error;
-
-  const combined = [...(commonResult.data ?? []), ...(trackResult.data ?? [])] as Module[];
-  combined.sort((a, b) => a.ordem - b.ordem);
-  return combined;
+/** Módulos comuns do Programa (track_id null) + os específicos da função do usuário, já escopados pelo Programa. */
+export async function listActiveModulesForTrack(programId: string, trackId: string | null): Promise<Module[]> {
+  const modules = await listActiveModulesForProgram(programId);
+  return modules.filter((m) => m.track_id === null || m.track_id === trackId);
 }
 
 export async function getModuleById(id: string): Promise<Module | null> {

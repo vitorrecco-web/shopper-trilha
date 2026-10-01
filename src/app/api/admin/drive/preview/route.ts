@@ -2,14 +2,15 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { requireAdminOrRespond } from "@/lib/auth/apiGuard";
 import { getGoogleDriveLister, getDriveRootFolderId } from "@/lib/drive/googleDriveClient";
-import { mapTrilhaFromDrive } from "@/lib/drive/trilhaMapper";
+import { mapUniversidadeFromDrive } from "@/lib/drive/trilhaMapper";
 
 /**
- * Fase 4 — só leitura. Mapeia a estrutura real do Drive e devolve como
- * JSON, sem gravar nada no banco (isso é a Fase 5, com prévia + confirmação
- * do admin). Critério de aceite: "aplicação consegue mapear a estrutura
- * real do Drive sem dar acesso aos alunos" — por isso esta rota exige
- * admin (guardada no middleware e de novo aqui).
+ * Fase 4 (estendida para Universidade Shopper) — só leitura. Mapeia a
+ * estrutura real do Drive (raiz = Universidade Shopper, um Programa por
+ * subpasta) e devolve como JSON, sem gravar nada no banco (isso é a Fase
+ * 5, com prévia + confirmação do admin). Critério de aceite: "aplicação
+ * consegue mapear a estrutura real do Drive sem dar acesso aos alunos" —
+ * por isso esta rota exige admin (guardada no middleware e de novo aqui).
  */
 export async function GET() {
   const guard = await requireAdminOrRespond();
@@ -25,7 +26,7 @@ export async function GET() {
 
   try {
     const lister = getGoogleDriveLister();
-    const result = await mapTrilhaFromDrive(lister, rootFolderId);
+    const result = await mapUniversidadeFromDrive(lister, rootFolderId);
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     // Não vazar detalhes de credenciais/infra do Google ao cliente.

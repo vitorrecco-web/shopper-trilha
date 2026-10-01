@@ -1,8 +1,14 @@
 import "server-only";
-import { mapTrilhaFromDrive, type MappedTrilha, type MappedModule } from "@/lib/drive/trilhaMapper";
+import { mapUniversidadeFromDrive, type MappedUniversidade, type MappedModule } from "@/lib/drive/trilhaMapper";
 import { getGoogleDriveLister, getDriveRootFolderId, fetchDriveFileAsText } from "@/lib/drive/googleDriveClient";
 import { validatePerguntasJson } from "@/lib/drive/validatePerguntas";
 import { validateVideoJson } from "@/lib/drive/validateVideoJson";
+import {
+  listAllPrograms,
+  upsertProgramByDriveFolderId,
+  deactivateProgram,
+  getProgramByDriveFolderId,
+} from "@/lib/repositories/programsRepository";
 import {
   listAllTracks,
   upsertTrackByDriveFolderId,
@@ -24,16 +30,18 @@ import {
 import { diffTrilha, type SyncPlan, type ChangeType } from "./diffTrilha";
 
 /**
- * Lê o Drive e valida o conteúdo de perguntas.json (§8.1) e video.json —
- * ambos seguem a mesma regra: se inválido, mostra aviso e o módulo é
- * rebaixado (sem perguntas / sem material principal), nunca interrompe
- * a sincronização. `mapTrilhaFromDrive` só lista metadados; buscar e
- * validar CONTEÚDO de arquivo fica sempre aqui, depois do mapeamento.
+ * Lê o Drive (raiz = Universidade Shopper, um nível acima de cada
+ * Programa/trilha) e valida o conteúdo de perguntas.json (§8.1) e
+ * video.json — ambos seguem a mesma regra: se inválido, mostra aviso e
+ * o módulo é rebaixado (sem perguntas / sem material principal), nunca
+ * interrompe a sincronização. `mapUniversidadeFromDrive` só lista
+ * metadados; buscar e validar CONTEÚDO de arquivo fica sempre aqui,
+ * depois do mapeamento.
  */
-async function fetchMappedTrilhaWithValidatedQuestions(): Promise<MappedTrilha> {
+async function fetchMappedUniversidadeWithValidatedQuestions(): Promise<MappedUniversidade> {
   const rootFolderId = getDriveRootFolderId();
   const lister = getGoogleDriveLister();
-  const mapped = await mapTrilhaFromDrive(lister, rootFolderId);
+  const mapped = await mapUniversidadeFromDrive(lister, rootFolderId);
   const warnings = [...mapped.warnings];
 
   async function validateModule(mod: MappedModule, context: string): Promise<MappedModule> {
@@ -87,30 +95,37 @@ async function fetchMappedTrilhaWithValidatedQuestions(): Promise<MappedTrilha> 
     return result;
   }
 
-  for (const phase of mapped.phases) {
-    const context = `Fase ${phase.ordem} (${phase.nome})`;
-    if (phase.phase_type === "common") {
-      for (let i = 0; i < phase.modules.length; i++) {
-        phase.modules[i] = await validateModule(phase.modules[i], context);
-      }
-    } else {
-      for (const track of phase.tracks) {
-        const trackContext = `${context} > ${track.nome}`;
-        for (let i = 0; i < track.modules.length; i++) {
-          track.modules[i] = await validateModule(track.modules[i], trackContext);
+  for (const program of mapped.programs) {
+    for (const phase of program.phases) {
+      const context = `${program.nome} > Fase ${phase.ordem} (${phase.nome})`;
+      if (phase.phase_type === "common") {
+        for (let i = 0; i < phase.modules.length; i++) {
+          phase.modules[i] = await validateModule(phase.modules[i], context);
+        }
+      } else {
+        for (const track of phase.tracks) {
+          const trackContext = `${context} > ${track.nome}`;
+          for (let i = 0; i < track.modules.length; i++) {
+            track.modules[i] = await validateModule(track.modules[i], trackContext);
+          }
         }
       }
     }
   }
 
-  return { phases: mapped.phases, warnings };
+  return { programs: mapped.programs, warnings };
 }
 
-/** Fase 5, tarefas 1-5: só lê (Drive + banco) e monta o plano — nada é gravado. */
+/** Fase 5, tarefas 1-5 (estendida para Programas): só lê (Drive + banco) e monta o plano — nada é gravado. */
 export async function buildSyncPlan(): Promise<SyncPlan> {
-  const mapped = await fetchMappedTrilhaWithValidatedQuestions();
-  const [tracks, phases, modules] = await Promise.all([listAllTracks(), listAllPhases(), listAllModules()]);
-  return diffTrilha(mapped, { tracks, phases, modules });
+  const mapped = await fetchMappedUniversidadeWithValidatedQuestions();
+  const [programs, tracks, phases, modules] = await Promise.all([
+    listAllPrograms(),
+    listAllTracks(),
+    listAllPhases(),
+    listAllModules(),
+  ]);
+  return diffTrilha(mapped, { programs, tracks, phases, modules });
 }
 
 export interface ApplySummary {
@@ -120,9 +135,10 @@ export interface ApplySummary {
 }
 
 /**
- * Fase 5, tarefas 7-8: aplica o plano (só chamado depois da confirmação
- * do admin). Ordem importa: tracks e phases antes de modules, porque
- * modules referenciam ambos por FK.
+ * Fase 5, tarefas 7-8 (estendida para Programas): aplica o plano (só
+ * chamado depois da confirmação do admin). Ordem importa: programs antes
+ * de tracks/phases, que por sua vez vêm antes de modules — tudo
+ * referencia por FK o nível acima.
  *
  * Sem transação atômica entre as tabelas (limitação conhecida do
  * supabase-js sobre REST — ver README, débito técnico). Cada item é
@@ -132,9 +148,35 @@ export interface ApplySummary {
 export async function applySyncPlan(plan: SyncPlan): Promise<ApplySummary> {
   const failures: string[] = [];
 
+  for (const p of plan.programUpserts) {
+    try {
+      await upsertProgramByDriveFolderId({ drive_folder_id: p.drive_folder_id, nome: p.nome, active: true });
+    } catch (err) {
+      failures.push(`Programa "${p.nome}": ${err instanceof Error ? err.message : "erro desconhecido"}`);
+    }
+  }
+  for (const driveId of plan.programsToDeactivate) {
+    try {
+      const existing = await getProgramByDriveFolderId(driveId);
+      if (existing) await deactivateProgram(existing.id);
+    } catch (err) {
+      failures.push(`Desativar Programa (${driveId}): ${err instanceof Error ? err.message : "erro desconhecido"}`);
+    }
+  }
+
   for (const t of plan.trackUpserts) {
     try {
-      await upsertTrackByDriveFolderId({ drive_folder_id: t.drive_folder_id, nome: t.nome, active: true });
+      const program = await getProgramByDriveFolderId(t.program_drive_folder_id);
+      if (!program) {
+        failures.push(`Trilha "${t.nome}": Programa não encontrado após sincronização.`);
+        continue;
+      }
+      await upsertTrackByDriveFolderId({
+        program_id: program.id,
+        drive_folder_id: t.drive_folder_id,
+        nome: t.nome,
+        active: true,
+      });
     } catch (err) {
       failures.push(`Trilha "${t.nome}": ${err instanceof Error ? err.message : "erro desconhecido"}`);
     }
@@ -150,7 +192,13 @@ export async function applySyncPlan(plan: SyncPlan): Promise<ApplySummary> {
 
   for (const p of plan.phaseUpserts) {
     try {
+      const program = await getProgramByDriveFolderId(p.program_drive_folder_id);
+      if (!program) {
+        failures.push(`Fase "${p.nome}": Programa não encontrado após sincronização.`);
+        continue;
+      }
       await upsertPhaseByDriveFolderId({
+        program_id: program.id,
         drive_folder_id: p.drive_folder_id,
         nome: p.nome,
         ordem: p.ordem,

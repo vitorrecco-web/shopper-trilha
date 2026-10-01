@@ -19,8 +19,11 @@ import { buildOrderedModules } from "./trilhaView";
  * mas a função já existe, testada, pronta para ser chamada por elas.
  */
 
-async function getOrderedModulesForTrack(trackId: string | null): Promise<Module[]> {
-  const [phases, modules] = await Promise.all([listActivePhases(), listActiveModulesForTrack(trackId)]);
+async function getOrderedModulesForTrack(programId: string, trackId: string | null): Promise<Module[]> {
+  const [phases, modules] = await Promise.all([
+    listActivePhases(programId),
+    listActiveModulesForTrack(programId, trackId),
+  ]);
   return buildOrderedModules(phases, modules);
 }
 
@@ -36,8 +39,12 @@ export function findNextModuleId(ordered: Module[], completedModuleId: string): 
  * Idempotente — pode (e deve) ser chamada toda vez que a Fase 6 monta
  * "Minha Trilha"; só grava de verdade na primeira vez.
  */
-export async function ensureFirstModuleUnlocked(userId: string, trackId: string | null): Promise<void> {
-  const ordered = await getOrderedModulesForTrack(trackId);
+export async function ensureFirstModuleUnlocked(
+  userId: string,
+  programId: string,
+  trackId: string | null
+): Promise<void> {
+  const ordered = await getOrderedModulesForTrack(programId, trackId);
   const first = ordered[0];
   if (!first) return;
   await markUnlocked(userId, first.id);
@@ -52,10 +59,11 @@ export async function ensureFirstModuleUnlocked(userId: string, trackId: string 
  */
 export async function unlockNextModule(
   userId: string,
+  programId: string,
   trackId: string | null,
   completedModuleId: string
 ): Promise<void> {
-  const ordered = await getOrderedModulesForTrack(trackId);
+  const ordered = await getOrderedModulesForTrack(programId, trackId);
   const nextId = findNextModuleId(ordered, completedModuleId);
   if (!nextId) return;
   await markUnlocked(userId, nextId);

@@ -20,12 +20,13 @@ export default async function UsuarioDetalhePage({ params }: { params: { id: str
   const user = await getUserWithTrackById(params.id);
   if (!user) notFound();
 
+  const programId = user.program_id ?? null;
   const [phases, modules, userModules, attempts, progress] = await Promise.all([
-    listActivePhases(),
-    listActiveModulesForTrack(user.track_id),
+    programId ? listActivePhases(programId) : Promise.resolve([]),
+    programId ? listActiveModulesForTrack(programId, user.track_id) : Promise.resolve([]),
     listUserModules(user.id),
     listAttemptsForUser(user.id),
-    computeUserProgress(user.id, user.track_id),
+    computeUserProgress(user.id, programId, user.track_id),
   ]);
 
   // buildOrderedModules (já usada na Fase 6/7 para "Minha Trilha") ordena
@@ -74,6 +75,7 @@ export default async function UsuarioDetalhePage({ params }: { params: { id: str
             nome_completo: user.nome_completo,
             matricula: user.matricula,
             login: user.login,
+            program_nome: user.program?.nome ?? "—",
             track_nome: user.track?.nome ?? "—",
             cd: user.cd,
             turno: user.turno,

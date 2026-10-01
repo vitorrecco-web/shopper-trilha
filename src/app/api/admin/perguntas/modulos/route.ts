@@ -4,6 +4,7 @@ import { requireAdminOrRespond } from "@/lib/auth/apiGuard";
 import { listAllModules } from "@/lib/repositories/modulesRepository";
 import { listAllPhases } from "@/lib/repositories/phasesRepository";
 import { listAllTracks } from "@/lib/repositories/tracksRepository";
+import { listAllPrograms } from "@/lib/repositories/programsRepository";
 
 /**
  * Editor visual de perguntas (Admin) — lista só módulos que já têm um
@@ -16,27 +17,31 @@ export async function GET() {
   if ("response" in guard) return guard.response;
 
   try {
-    const [modules, phases, tracks] = await Promise.all([
+    const [modules, phases, tracks, programs] = await Promise.all([
       listAllModules(),
       listAllPhases(),
       listAllTracks(),
+      listAllPrograms(),
     ]);
 
     const phaseById = new Map(phases.map((p) => [p.id, p]));
     const trackById = new Map(tracks.map((t) => [t.id, t]));
+    const programById = new Map(programs.map((p) => [p.id, p]));
 
-    // Ordenado pela ordem real da trilha (fase -> trilha -> módulo), não
-    // alfabeticamente pelo nome — com muitos módulos, ordem alfabética
-    // espalha os módulos de uma mesma fase/trilha pela lista inteira e
-    // torna impossível achar o que se procura (feedback do admin).
+    // Ordenado pela ordem real da trilha (Programa -> fase -> trilha ->
+    // módulo), não alfabeticamente pelo nome — com muitos módulos, ordem
+    // alfabética espalha os módulos de uma mesma fase/trilha pela lista
+    // inteira e torna impossível achar o que se procura (feedback do admin).
     const withQuiz = modules
       .filter((m) => Boolean(m.questions_drive_id))
       .map((m) => {
         const phase = phaseById.get(m.phase_id);
+        const program = phase ? programById.get(phase.program_id) : undefined;
         return {
           id: m.id,
           nome: m.nome,
           ordem: m.ordem,
+          programNome: program?.nome ?? null,
           faseNome: phase?.nome ?? null,
           faseOrdem: phase?.ordem ?? Number.MAX_SAFE_INTEGER,
           phaseType: phase?.phase_type ?? "common",
@@ -46,6 +51,9 @@ export async function GET() {
         };
       })
       .sort((a, b) => {
+        const aProgram = a.programNome ?? "";
+        const bProgram = b.programNome ?? "";
+        if (aProgram !== bProgram) return aProgram.localeCompare(bProgram, "pt-BR");
         if (a.faseOrdem !== b.faseOrdem) return a.faseOrdem - b.faseOrdem;
         const aTrack = a.trackNome ?? "";
         const bTrack = b.trackNome ?? "";

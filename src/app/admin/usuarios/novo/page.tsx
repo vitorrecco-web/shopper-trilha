@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentSession } from "@/lib/auth/getSession";
-import { listActiveTracks } from "@/lib/repositories/tracksRepository";
+import { listActivePrograms } from "@/lib/repositories/programsRepository";
 import { theme } from "@/lib/ui/theme";
 import { Header } from "@/components/ui/Header";
 import { PageShell, Container } from "@/components/ui/Container";
@@ -12,7 +12,7 @@ export default async function NovoUsuarioPage() {
   if (!session) redirect("/login");
   if (session.role !== "admin") redirect("/app");
 
-  const tracks = await listActiveTracks();
+  const programs = await listActivePrograms();
 
   return (
     <PageShell>
@@ -27,7 +27,7 @@ export default async function NovoUsuarioPage() {
         />
         <h1 style={{ fontSize: theme.font.size.xxl, marginTop: 0, marginBottom: theme.space(4) }}>Novo usuário</h1>
 
-        {tracks.length === 0 && (
+        {programs.length === 0 && (
           <p
             style={{
               fontSize: theme.font.size.sm,
@@ -38,12 +38,12 @@ export default async function NovoUsuarioPage() {
               marginBottom: theme.space(4),
             }}
           >
-            Nenhuma trilha ativa cadastrada ainda — isso é populado pela sincronização com o
-            Drive. Sem uma trilha, não é possível criar um usuário aqui.
+            Nenhum Programa ativo cadastrado ainda — isso é populado pela sincronização com o
+            Drive. Sem um Programa, não é possível criar um usuário aqui.
           </p>
         )}
 
-        <NewUserForm tracks={tracks} />
+        <NewUserForm programs={programs} />
       </Container>
     </PageShell>
   );

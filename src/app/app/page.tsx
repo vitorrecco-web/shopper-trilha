@@ -12,14 +12,14 @@ export default async function AppHomePage() {
   if (!session) redirect("/login");
 
   const user = await getUserById(session.userId);
-  if (!user || user.status === "inactive") redirect("/login");
+  if (!user || user.status === "inactive" || !user.program_id) redirect("/login");
 
   // Fase 7: garante (de forma idempotente) que o primeiro módulo da
   // trilha deste usuário já está persistido como liberado, antes de ler
   // o estado para exibição.
-  await ensureFirstModuleUnlocked(user.id, user.track_id);
+  await ensureFirstModuleUnlocked(user.id, user.program_id, user.track_id);
 
-  const trilha = await getTrilhaViewForUser(user.id, user.track_id);
+  const trilha = await getTrilhaViewForUser(user.id, user.program_id, user.track_id);
 
   return (
     <PageShell>

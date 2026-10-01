@@ -28,9 +28,14 @@ interface MappedPhase {
   modules: MappedModule[];
   tracks: MappedTrack[];
 }
+interface MappedProgram {
+  drive_folder_id: string;
+  nome: string;
+  phases: MappedPhase[];
+}
 interface StructureResult {
   ok: boolean;
-  phases?: MappedPhase[];
+  programs?: MappedProgram[];
   error?: string;
 }
 
@@ -187,37 +192,45 @@ export function DriveSyncPanel() {
         </p>
       )}
 
-      {/* Estrutura lida do Drive agora (visualização preservada) */}
+      {/* Estrutura lida do Drive agora — um bloco por Programa (Universidade Shopper) */}
       {structure?.ok && (
         <>
           <p style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint, marginBottom: 8, marginTop: 4 }}>
             Estrutura lida do Drive agora:
           </p>
-          {structure.phases?.map((phase) => (
-            <div key={phase.drive_folder_id} style={boxStyle}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                <b style={{ fontSize: theme.font.size.base, color: theme.color.text }}>
-                  Fase {phase.ordem} — {phase.nome}
-                </b>
-                <span style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint }}>
-                  {phase.phase_type === "common" ? "comum" : "por trilha"}
-                </span>
+          {structure.programs?.map((program) => (
+            <div key={program.drive_folder_id} style={{ marginBottom: theme.space(4) }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <Badge tone="primary">Programa</Badge>
+                <b style={{ fontSize: theme.font.size.lg, color: theme.color.text }}>{program.nome}</b>
               </div>
+              {program.phases.map((phase) => (
+                <div key={phase.drive_folder_id} style={{ ...boxStyle, marginLeft: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                    <b style={{ fontSize: theme.font.size.base, color: theme.color.text }}>
+                      Fase {phase.ordem} — {phase.nome}
+                    </b>
+                    <span style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint }}>
+                      {phase.phase_type === "common" ? "comum" : "por trilha"}
+                    </span>
+                  </div>
 
-              {phase.phase_type === "common"
-                ? phase.modules.map((m) => <ModuleRow key={m.drive_folder_id} m={m} />)
-                : phase.tracks.map((t) => (
-                    <div key={t.drive_folder_id} style={{ marginBottom: 8, marginLeft: 8 }}>
-                      <div style={{ fontSize: 13, color: theme.color.primaryDark, fontWeight: 600, marginBottom: 2 }}>
-                        {t.nome}
-                      </div>
-                      <div style={{ marginLeft: 12 }}>
-                        {t.modules.map((m) => (
-                          <ModuleRow key={m.drive_folder_id} m={m} />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                  {phase.phase_type === "common"
+                    ? phase.modules.map((m) => <ModuleRow key={m.drive_folder_id} m={m} />)
+                    : phase.tracks.map((t) => (
+                        <div key={t.drive_folder_id} style={{ marginBottom: 8, marginLeft: 8 }}>
+                          <div style={{ fontSize: 13, color: theme.color.primaryDark, fontWeight: 600, marginBottom: 2 }}>
+                            {t.nome}
+                          </div>
+                          <div style={{ marginLeft: 12 }}>
+                            {t.modules.map((m) => (
+                              <ModuleRow key={m.drive_folder_id} m={m} />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                </div>
+              ))}
             </div>
           ))}
         </>

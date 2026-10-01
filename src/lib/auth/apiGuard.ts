@@ -39,9 +39,15 @@ export async function requireAdminOrRespond(): Promise<
  * válida + usuário ativo, com erro de banco tratado (débito técnico
  * anotado nas Fases 8/9, resolvido na Fase 11 — tarefa 6, tratamento de
  * erros). Nunca vaza detalhe de infraestrutura ao cliente.
+ *
+ * `program_id` precisa existir aqui — essas rotas são só de aluno (quiz,
+ * PDF, progresso de vídeo), e um aluno sempre tem Programa atribuído na
+ * criação (§ cadastro em /admin/usuarios/novo). `program_id` nulo só
+ * acontece para admin (mesmo padrão de `track_id`) — um admin batendo
+ * numa rota de aluno é tratado como acesso inválido, não como bug.
  */
 export async function requireActiveUserOrRespond(): Promise<
-  { user: User } | { response: NextResponse }
+  { user: User & { program_id: string } } | { response: NextResponse }
 > {
   const session = await getCurrentSession();
   if (!session) {
@@ -53,7 +59,10 @@ export async function requireActiveUserOrRespond(): Promise<
     if (!user || user.status === "inactive") {
       return { response: NextResponse.json({ ok: false, error: "Usuário inválido." }, { status: 401 }) };
     }
-    return { user };
+    if (!user.program_id) {
+      return { response: NextResponse.json({ ok: false, error: "Usuário sem Programa atribuído." }, { status: 403 }) };
+    }
+    return { user: { ...user, program_id: user.program_id } };
   } catch (err) {
     console.error("Erro ao carregar usuário da sessão:", err);
     return {

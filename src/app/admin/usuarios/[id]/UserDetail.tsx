@@ -13,6 +13,7 @@ interface UserInfo {
   nome_completo: string;
   matricula: string | null;
   login: string;
+  program_nome: string;
   track_nome: string;
   cd: string | null;
   turno: string | null;
@@ -270,7 +271,8 @@ export function UserDetail({
         {user.nome_completo}
       </h1>
       <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, marginBottom: theme.space(5) }}>
-        Trilha: <b style={{ color: theme.color.text }}>{user.track_nome}</b> (não editável) · Matrícula:{" "}
+        Programa: <b style={{ color: theme.color.text }}>{user.program_nome}</b> · Função:{" "}
+        <b style={{ color: theme.color.text }}>{user.track_nome}</b> (não editável) · Matrícula:{" "}
         {user.matricula ?? "—"} · Início: {formatDate(user.created_at)} · Último acesso:{" "}
         {formatDate(user.last_login_at)}
       </p>

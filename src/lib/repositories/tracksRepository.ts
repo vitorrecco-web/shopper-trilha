@@ -14,6 +14,20 @@ export async function listActiveTracks(): Promise<Track[]> {
   return data as Track[];
 }
 
+/** Funções/cargos ativos de UM Programa — usado no cadastro de aluno (§11.1), já escopado pelo Programa escolhido. */
+export async function listActiveTracksForProgram(programId: string): Promise<Track[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("tracks")
+    .select("*")
+    .eq("active", true)
+    .eq("program_id", programId)
+    .order("nome", { ascending: true });
+
+  if (error) throw error;
+  return data as Track[];
+}
+
 /** Inclui inativas — usado pela sincronização (Fase 5) para reconciliar contra o Drive. */
 export async function listAllTracks(): Promise<Track[]> {
   const supabase = getSupabaseServerClient();
@@ -48,6 +62,7 @@ export async function getTrackByDriveFolderId(driveFolderId: string): Promise<Tr
  * criar/desativar tracks manualmente quebra a regra de "Drive é fonte de verdade".
  */
 export async function upsertTrackByDriveFolderId(input: {
+  program_id: string;
   drive_folder_id: string;
   nome: string;
   active?: boolean;
@@ -56,7 +71,12 @@ export async function upsertTrackByDriveFolderId(input: {
   const { data, error } = await supabase
     .from("tracks")
     .upsert(
-      { drive_folder_id: input.drive_folder_id, nome: input.nome, active: input.active ?? true },
+      {
+        program_id: input.program_id,
+        drive_folder_id: input.drive_folder_id,
+        nome: input.nome,
+        active: input.active ?? true,
+      },
       { onConflict: "drive_folder_id" }
     )
     .select("*")

@@ -13,6 +13,7 @@ export interface UserRow {
   nome_completo: string;
   matricula: string | null;
   login: string;
+  program_nome: string;
   track_id: string | null;
   track_nome: string;
   cd: string | null;
@@ -156,6 +157,7 @@ export function UsersTable({ initialUsers, tracks }: { initialUsers: UserRow[]; 
               {[
                 "Nome",
                 "Matrícula",
+                "Programa",
                 "Trilha",
                 "CD",
                 "Turno",
@@ -183,6 +185,7 @@ export function UsersTable({ initialUsers, tracks }: { initialUsers: UserRow[]; 
                   </Link>
                 </td>
                 <td style={{ padding: "12px 14px", color: theme.color.textMuted }}>{u.matricula ?? "—"}</td>
+                <td style={{ padding: "12px 14px" }}>{u.program_nome}</td>
                 <td style={{ padding: "12px 14px" }}>{u.track_nome}</td>
                 <td style={{ padding: "12px 14px", color: theme.color.textMuted }}>{u.cd ?? "—"}</td>
                 <td style={{ padding: "12px 14px", color: theme.color.textMuted }}>{u.turno ?? "—"}</td>
@@ -219,7 +222,7 @@ export function UsersTable({ initialUsers, tracks }: { initialUsers: UserRow[]; 
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={10} style={{ padding: 20, textAlign: "center", color: theme.color.textFaint }}>
+                <td colSpan={11} style={{ padding: 20, textAlign: "center", color: theme.color.textFaint }}>
                   Nenhum usuário encontrado.
                 </td>
               </tr>

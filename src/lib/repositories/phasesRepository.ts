@@ -2,12 +2,13 @@ import "server-only";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { Phase } from "@/lib/db/types";
 
-export async function listActivePhases(): Promise<Phase[]> {
+export async function listActivePhases(programId: string): Promise<Phase[]> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from("phases")
     .select("*")
     .eq("active", true)
+    .eq("program_id", programId)
     .order("ordem", { ascending: true });
 
   if (error) throw error;
@@ -37,6 +38,7 @@ export async function getPhaseByDriveFolderId(driveFolderId: string): Promise<Ph
 
 /** Usado apenas pelo fluxo de sincronização (Fase 5). */
 export async function upsertPhaseByDriveFolderId(input: {
+  program_id: string;
   drive_folder_id: string;
   nome: string;
   ordem: number;
@@ -48,6 +50,7 @@ export async function upsertPhaseByDriveFolderId(input: {
     .from("phases")
     .upsert(
       {
+        program_id: input.program_id,
         drive_folder_id: input.drive_folder_id,
         nome: input.nome,
         ordem: input.ordem,

@@ -20,10 +20,10 @@ export default async function QuizPage({ params }: { params: { id: string } }) {
   if (!session) redirect("/login");
 
   const user = await getUserById(session.userId);
-  if (!user || user.status === "inactive") redirect("/login");
+  if (!user || user.status === "inactive" || !user.program_id) redirect("/login");
 
   const moduleHref = `/app/modulo/${params.id}`;
-  const access = await getModuleAccessInfo(user.id, user.track_id, params.id);
+  const access = await getModuleAccessInfo(user.id, user.program_id, user.track_id, params.id);
   if (!access) notFound();
   if (!access.unlocked || !access.module.has_questions) redirect(moduleHref);
   if (!access.materialAccessed) redirect(moduleHref);

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Track } from "@/lib/db/types";
+import type { Program, Track } from "@/lib/db/types";
 import { theme } from "@/lib/ui/theme";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -27,24 +27,63 @@ const labelStyle: React.CSSProperties = {
   marginBottom: theme.space(3),
 };
 
-export function NewUserForm({ tracks }: { tracks: Track[] }) {
+export function NewUserForm({ programs }: { programs: Program[] }) {
   const router = useRouter();
   const [form, setForm] = useState({
     nome_completo: "",
     matricula: "",
     login: "",
     password: "",
-    track_id: tracks[0]?.id ?? "",
+    program_id: programs[0]?.id ?? "",
+    track_id: "",
     cd: "",
     turno: "",
     status: "active" as "active" | "inactive",
   });
+  const [tracks, setTracks] = useState<Track[] | null>(null);
+  const [loadingTracks, setLoadingTracks] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
+
+  // Cada Programa pode ter (ou não) funções/cargos — Fase 1 por função é
+  // uma possibilidade do Programa, não garantia. A lista é buscada de
+  // novo sempre que o Programa muda.
+  useEffect(() => {
+    if (!form.program_id) {
+      setTracks([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingTracks(true);
+    fetch(`/api/admin/tracks?programId=${encodeURIComponent(form.program_id)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        setTracks(data.ok ? (data.tracks as Track[]) : []);
+      })
+      .catch(() => {
+        if (!cancelled) setTracks([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingTracks(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.program_id]);
+
+  // Se a Função selecionada não existir mais na lista do novo Programa, limpa.
+  useEffect(() => {
+    if (tracks && !tracks.some((t) => t.id === form.track_id)) {
+      update("track_id", "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tracks]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -59,7 +98,8 @@ export function NewUserForm({ tracks }: { tracks: Track[] }) {
           matricula: form.matricula || null,
           login: form.login,
           password: form.password,
-          track_id: form.track_id,
+          program_id: form.program_id,
+          track_id: form.track_id || null,
           cd: form.cd || null,
           turno: form.turno || null,
           status: form.status,
@@ -122,22 +162,42 @@ export function NewUserForm({ tracks }: { tracks: Track[] }) {
         </label>
 
         <label style={labelStyle}>
-          Trilha/Função *
+          Programa *
           <select
             required
             style={inputStyle}
-            value={form.track_id}
-            onChange={(e) => update("track_id", e.target.value)}
-            disabled={tracks.length === 0}
+            value={form.program_id}
+            onChange={(e) => update("program_id", e.target.value)}
+            disabled={programs.length === 0}
           >
-            {tracks.length === 0 && <option value="">Nenhuma trilha ativa</option>}
-            {tracks.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.nome}
+            {programs.length === 0 && <option value="">Nenhum Programa ativo</option>}
+            {programs.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nome}
               </option>
             ))}
           </select>
         </label>
+
+        {loadingTracks && (
+          <p style={{ fontSize: theme.font.size.xs, color: theme.color.textMuted, marginTop: -8, marginBottom: theme.space(3) }}>
+            Carregando funções deste Programa...
+          </p>
+        )}
+
+        {!loadingTracks && tracks && tracks.length > 0 && (
+          <label style={labelStyle}>
+            Função
+            <select required style={inputStyle} value={form.track_id} onChange={(e) => update("track_id", e.target.value)}>
+              <option value="">Selecione...</option>
+              {tracks.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label style={labelStyle}>
           CD/Galpão
@@ -177,7 +237,11 @@ export function NewUserForm({ tracks }: { tracks: Track[] }) {
           </p>
         )}
 
-        <Button type="submit" disabled={loading || tracks.length === 0} fullWidth>
+        <Button
+          type="submit"
+          disabled={loading || programs.length === 0 || Boolean(tracks && tracks.length > 0 && !form.track_id)}
+          fullWidth
+        >
           {loading ? "Criando..." : "Criar usuário"}
         </Button>
       </form>

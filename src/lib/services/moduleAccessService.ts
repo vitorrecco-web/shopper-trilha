@@ -42,12 +42,13 @@ export interface ModuleAccessInfo {
 
 export async function getModuleAccessInfo(
   userId: string,
+  programId: string,
   trackId: string | null,
   moduleId: string
 ): Promise<ModuleAccessInfo | null> {
   const [phases, modules, userModules] = await Promise.all([
-    listActivePhases(),
-    listActiveModulesForTrack(trackId),
+    listActivePhases(programId),
+    listActiveModulesForTrack(programId, trackId),
     listUserModules(userId),
   ]);
 

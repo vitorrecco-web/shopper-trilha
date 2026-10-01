@@ -235,7 +235,7 @@ async function getEligibleStudentsWithProgress(): Promise<{
   const usersWithTrack = await listUsersWithTrack();
   const students = usersWithTrack.filter((u) => u.role === "student" && u.status === "active");
   const progressByUserId = await computeUsersProgressBatch(
-    students.map((u) => ({ id: u.id, track_id: u.track_id }))
+    students.map((u) => ({ id: u.id, program_id: u.program_id, track_id: u.track_id }))
   );
   return { students, progressByUserId };
 }

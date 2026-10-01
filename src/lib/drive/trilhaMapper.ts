@@ -2,17 +2,21 @@ import "server-only";
 import { FOLDER_MIME, PDF_MIME, type DriveItem, type DriveLister } from "./types";
 
 /**
- * Implementa a convenção descrita em PROJECT_CONTEXT.md §5:
+ * Implementa a convenção descrita em PROJECT_CONTEXT.md §5, estendida
+ * para a Universidade Shopper (vários Programas/trilhas completas):
  *
- *   Trilha de Liderança/
- *   ├── Fase 1 - <assunto>/
- *   │   ├── Supervisor de Picking/      <- "função"/trilha (specific_track)
+ *   Universidade Shopper/
+ *   ├── Trilha de Liderança/                <- um Programa (nome livre, sem prefixo)
+ *   │   ├── Fase 1 - <assunto>/
+ *   │   │   ├── Supervisor de Picking/      <- "função" (specific_track)
+ *   │   │   │   ├── Módulo 1/
+ *   │   │   │   │   ├── <nome>.pdf
+ *   │   │   │   │   └── perguntas.json      (opcional)
+ *   │   │   ├── Supervisor de Packing/
+ *   │   ├── Fase 2 - <assunto>/             <- módulos direto na fase (common)
  *   │   │   ├── Módulo 1/
- *   │   │   │   ├── <nome>.pdf
- *   │   │   │   └── perguntas.json      (opcional)
- *   │   ├── Supervisor de Packing/
- *   ├── Fase 2 - <assunto>/             <- módulos direto na fase (common)
- *   │   ├── Módulo 1/
+ *   ├── Trilha de Logística/                <- outro Programa, independente
+ *   │   ├── Fase 1 - <assunto>/
  *
  *   §5.1: nome do PDF (sem extensão) = título do módulo exibido ao usuário.
  *         Nome da pasta do módulo só define a ordem.
@@ -69,6 +73,17 @@ export interface MappedPhase {
 
 export interface MappedTrilha {
   phases: MappedPhase[];
+  warnings: string[];
+}
+
+export interface MappedProgram {
+  drive_folder_id: string;
+  nome: string;
+  phases: MappedPhase[];
+}
+
+export interface MappedUniversidade {
+  programs: MappedProgram[];
   warnings: string[];
 }
 
@@ -176,12 +191,10 @@ async function readModulesUnder(
   return modules;
 }
 
-export async function mapTrilhaFromDrive(
-  lister: DriveLister,
-  rootFolderId: string
-): Promise<MappedTrilha> {
+/** Lê as fases de UM Programa (um nível abaixo da raiz da Universidade Shopper) — lógica idêntica à Fase 4 original, agora reaproveitada por Programa. */
+async function mapPhasesFromDrive(lister: DriveLister, programFolderId: string): Promise<MappedTrilha> {
   const warnings: string[] = [];
-  const rootChildren = await lister.listChildren(rootFolderId);
+  const rootChildren = await lister.listChildren(programFolderId);
   const phaseFolders = rootChildren.filter(isFolder);
 
   const phases: MappedPhase[] = [];
@@ -256,4 +269,34 @@ export async function mapTrilhaFromDrive(
   }
 
   return { phases, warnings };
+}
+
+/**
+ * Ponto de entrada da Universidade Shopper — lista as subpastas diretas
+ * da raiz (cada uma é um Programa; nome da pasta = nome do Programa,
+ * livre, sem prefixo numerado, já que Programas não têm ordem sequencial
+ * entre si) e lê as fases de cada uma com `mapPhasesFromDrive`.
+ */
+export async function mapUniversidadeFromDrive(
+  lister: DriveLister,
+  universidadeRootFolderId: string
+): Promise<MappedUniversidade> {
+  const warnings: string[] = [];
+  const rootChildren = await lister.listChildren(universidadeRootFolderId);
+  const programFolders = rootChildren.filter(isFolder);
+
+  if (programFolders.length === 0) {
+    warnings.push("Pasta raiz da Universidade Shopper está vazia — nenhum Programa encontrado.");
+  }
+
+  const programs: MappedProgram[] = [];
+  for (const programFolder of programFolders) {
+    const { phases, warnings: phaseWarnings } = await mapPhasesFromDrive(lister, programFolder.id);
+    for (const w of phaseWarnings) {
+      warnings.push(`Programa "${programFolder.name}" > ${w}`);
+    }
+    programs.push({ drive_folder_id: programFolder.id, nome: programFolder.name, phases });
+  }
+
+  return { programs, warnings };
 }

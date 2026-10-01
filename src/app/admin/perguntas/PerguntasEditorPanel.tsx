@@ -9,6 +9,7 @@ interface ModuleOption {
   id: string;
   nome: string;
   ordem: number;
+  programNome: string | null;
   faseNome: string | null;
   faseOrdem: number;
   phaseType: "common" | "specific_track";
@@ -154,9 +155,11 @@ function buildPayload(perguntas: EditorPergunta[]) {
 }
 
 function groupLabelFor(m: ModuleOption): string {
-  return m.phaseType === "common"
-    ? m.faseNome ?? "Sem fase"
-    : `${m.faseNome ?? "Sem fase"} · ${m.trackNome ?? "Sem trilha"}`;
+  const faseLabel =
+    m.phaseType === "common"
+      ? m.faseNome ?? "Sem fase"
+      : `${m.faseNome ?? "Sem fase"} · ${m.trackNome ?? "Sem trilha"}`;
+  return m.programNome ? `${m.programNome} · ${faseLabel}` : faseLabel;
 }
 
 const boxStyle: React.CSSProperties = {
@@ -237,7 +240,9 @@ export function PerguntasEditorPanel() {
     if (!modules) return [];
     const term = normalizeSearch(moduleFilter.trim());
     const filtered = term
-      ? modules.filter((m) => normalizeSearch(`${m.faseNome ?? ""} ${m.trackNome ?? ""} ${m.nome}`).includes(term))
+      ? modules.filter((m) =>
+          normalizeSearch(`${m.programNome ?? ""} ${m.faseNome ?? ""} ${m.trackNome ?? ""} ${m.nome}`).includes(term)
+        )
       : modules;
 
     const order: string[] = [];

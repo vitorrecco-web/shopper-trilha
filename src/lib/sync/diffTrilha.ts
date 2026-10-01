@@ -1,5 +1,5 @@
-import type { MappedTrilha, MappedModule, PhaseType } from "@/lib/drive/trilhaMapper";
-import type { Track, Phase, Module } from "@/lib/db/types";
+import type { MappedUniversidade, MappedModule, PhaseType } from "@/lib/drive/trilhaMapper";
+import type { Program, Track, Phase, Module } from "@/lib/db/types";
 
 /**
  * Lógica pura de comparação Drive x banco (EXECUTION_PLAN Fase 5,
@@ -13,7 +13,7 @@ import type { Track, Phase, Module } from "@/lib/db/types";
  */
 
 export type ChangeType = "added" | "removed" | "renamed" | "reordered" | "updated";
-export type EntityType = "track" | "phase" | "module";
+export type EntityType = "program" | "track" | "phase" | "module";
 
 export interface SyncChangeDraft {
   entity_type: EntityType;
@@ -24,9 +24,15 @@ export interface SyncChangeDraft {
   label: string;
 }
 
+export interface ProgramUpsert {
+  drive_folder_id: string;
+  nome: string;
+}
+
 export interface TrackUpsert {
   drive_folder_id: string;
   nome: string;
+  program_drive_folder_id: string;
 }
 
 export interface PhaseUpsert {
@@ -34,6 +40,7 @@ export interface PhaseUpsert {
   nome: string;
   ordem: number;
   phase_type: PhaseType;
+  program_drive_folder_id: string;
 }
 
 export interface ModuleUpsert {
@@ -53,6 +60,7 @@ export interface ModuleUpsert {
 }
 
 export interface DbSnapshot {
+  programs: Program[];
   tracks: Track[];
   phases: Phase[];
   modules: Module[];
@@ -61,12 +69,48 @@ export interface DbSnapshot {
 export interface SyncPlan {
   changes: SyncChangeDraft[];
   warnings: string[];
+  programUpserts: ProgramUpsert[];
   trackUpserts: TrackUpsert[];
   phaseUpserts: PhaseUpsert[];
   moduleUpserts: ModuleUpsert[];
+  programsToDeactivate: string[];
   tracksToDeactivate: string[];
   phasesToDeactivate: string[];
   modulesToDeactivate: string[];
+}
+
+function diffProgram(discovered: ProgramUpsert, existing: Program | undefined, changes: SyncChangeDraft[]) {
+  if (!existing) {
+    changes.push({
+      entity_type: "program",
+      entity_drive_id: discovered.drive_folder_id,
+      change_type: "added",
+      old_value: null,
+      new_value: { nome: discovered.nome },
+      label: `Novo Programa: "${discovered.nome}"`,
+    });
+    return;
+  }
+  if (existing.nome !== discovered.nome) {
+    changes.push({
+      entity_type: "program",
+      entity_drive_id: discovered.drive_folder_id,
+      change_type: "renamed",
+      old_value: { nome: existing.nome },
+      new_value: { nome: discovered.nome },
+      label: `Programa renomeado: "${existing.nome}" → "${discovered.nome}"`,
+    });
+  }
+  if (!existing.active) {
+    changes.push({
+      entity_type: "program",
+      entity_drive_id: discovered.drive_folder_id,
+      change_type: "updated",
+      old_value: { active: false },
+      new_value: { active: true },
+      label: `Programa reativado: "${discovered.nome}"`,
+    });
+  }
 }
 
 function diffTrack(discovered: TrackUpsert, existing: Track | undefined, changes: SyncChangeDraft[]) {
@@ -254,18 +298,21 @@ function diffModule(discovered: ModuleUpsert, existing: Module | undefined, chan
   }
 }
 
-export function diffTrilha(mapped: MappedTrilha, db: DbSnapshot): SyncPlan {
+export function diffTrilha(mapped: MappedUniversidade, db: DbSnapshot): SyncPlan {
   const warnings = [...mapped.warnings];
   const changes: SyncChangeDraft[] = [];
 
+  const dbProgramsByDriveId = new Map(db.programs.map((p) => [p.drive_folder_id, p]));
   const dbTracksByDriveId = new Map(db.tracks.map((t) => [t.drive_folder_id, t]));
   const dbPhasesByDriveId = new Map(db.phases.map((p) => [p.drive_folder_id, p]));
   const dbModulesByDriveId = new Map(db.modules.map((m) => [m.drive_folder_id, m]));
 
+  const programUpserts: ProgramUpsert[] = [];
   const trackUpserts: TrackUpsert[] = [];
   const phaseUpserts: PhaseUpsert[] = [];
   const moduleUpserts: ModuleUpsert[] = [];
 
+  const discoveredProgramIds = new Set<string>();
   const discoveredTrackIds = new Set<string>();
   const discoveredPhaseIds = new Set<string>();
   const discoveredModuleIds = new Set<string>();
@@ -291,53 +338,75 @@ export function diffTrilha(mapped: MappedTrilha, db: DbSnapshot): SyncPlan {
     diffModule(upsert, dbModulesByDriveId.get(mod.drive_folder_id), changes);
   }
 
-  for (const phase of mapped.phases) {
-    discoveredPhaseIds.add(phase.drive_folder_id);
-    const phaseUpsert: PhaseUpsert = {
-      drive_folder_id: phase.drive_folder_id,
-      nome: phase.nome,
-      ordem: phase.ordem,
-      phase_type: phase.phase_type,
-    };
-    phaseUpserts.push(phaseUpsert);
-    diffPhase(phaseUpsert, dbPhasesByDriveId.get(phase.drive_folder_id), changes);
+  for (const program of mapped.programs) {
+    discoveredProgramIds.add(program.drive_folder_id);
+    const programUpsert: ProgramUpsert = { drive_folder_id: program.drive_folder_id, nome: program.nome };
+    programUpserts.push(programUpsert);
+    diffProgram(programUpsert, dbProgramsByDriveId.get(program.drive_folder_id), changes);
 
-    if (phase.phase_type === "common") {
-      for (const mod of phase.modules) {
-        pushModule(mod, phase.drive_folder_id, null);
-      }
-    } else {
-      for (const track of phase.tracks) {
-        discoveredTrackIds.add(track.drive_folder_id);
-        const trackUpsert: TrackUpsert = { drive_folder_id: track.drive_folder_id, nome: track.nome };
-        trackUpserts.push(trackUpsert);
-        diffTrack(trackUpsert, dbTracksByDriveId.get(track.drive_folder_id), changes);
+    for (const phase of program.phases) {
+      discoveredPhaseIds.add(phase.drive_folder_id);
+      const phaseUpsert: PhaseUpsert = {
+        drive_folder_id: phase.drive_folder_id,
+        nome: phase.nome,
+        ordem: phase.ordem,
+        phase_type: phase.phase_type,
+        program_drive_folder_id: program.drive_folder_id,
+      };
+      phaseUpserts.push(phaseUpsert);
+      diffPhase(phaseUpsert, dbPhasesByDriveId.get(phase.drive_folder_id), changes);
 
-        for (const mod of track.modules) {
-          pushModule(mod, phase.drive_folder_id, track.drive_folder_id);
+      if (phase.phase_type === "common") {
+        for (const mod of phase.modules) {
+          pushModule(mod, phase.drive_folder_id, null);
+        }
+      } else {
+        for (const track of phase.tracks) {
+          discoveredTrackIds.add(track.drive_folder_id);
+          const trackUpsert: TrackUpsert = {
+            drive_folder_id: track.drive_folder_id,
+            nome: track.nome,
+            program_drive_folder_id: program.drive_folder_id,
+          };
+          trackUpserts.push(trackUpsert);
+          diffTrack(trackUpsert, dbTracksByDriveId.get(track.drive_folder_id), changes);
+
+          for (const mod of track.modules) {
+            pushModule(mod, phase.drive_folder_id, track.drive_folder_id);
+          }
         }
       }
     }
   }
 
   // Fases ativas cuja ordem colide com uma fase diferente já existente
-  // no banco (não só entre as descobertas agora) violaria o índice único
-  // phases_active_order_unique — avisar antes de tentar aplicar.
+  // no banco DENTRO DO MESMO PROGRAMA (não só entre as descobertas agora)
+  // violaria o índice único phases_active_order_unique(program_id, ordem)
+  // — avisar antes de tentar aplicar. Um Programa recém-descoberto (ainda
+  // sem linha no banco) nunca pode colidir com fases existentes de outro
+  // Programa — por isso só verifica quando o Programa já existe.
   for (const p of phaseUpserts) {
+    const existingProgram = dbProgramsByDriveId.get(p.program_drive_folder_id);
+    if (!existingProgram) continue;
+
     const conflict = db.phases.find(
       (existing) =>
         existing.active &&
+        existing.program_id === existingProgram.id &&
         existing.ordem === p.ordem &&
         existing.drive_folder_id !== p.drive_folder_id &&
         !discoveredPhaseIds.has(existing.drive_folder_id)
     );
     if (conflict) {
       warnings.push(
-        `Fase "${p.nome}" (ordem ${p.ordem}) colide com a fase já cadastrada "${conflict.nome}", que não foi encontrada nesta leitura do Drive.`
+        `Fase "${p.nome}" (ordem ${p.ordem}) colide com a fase já cadastrada "${conflict.nome}" no mesmo Programa, que não foi encontrada nesta leitura do Drive.`
       );
     }
   }
 
+  const programsToDeactivate = db.programs
+    .filter((p) => p.active && !discoveredProgramIds.has(p.drive_folder_id))
+    .map((p) => p.drive_folder_id);
   const tracksToDeactivate = db.tracks
     .filter((t) => t.active && !discoveredTrackIds.has(t.drive_folder_id))
     .map((t) => t.drive_folder_id);
@@ -348,6 +417,18 @@ export function diffTrilha(mapped: MappedTrilha, db: DbSnapshot): SyncPlan {
     .filter((m) => m.active && !discoveredModuleIds.has(m.drive_folder_id))
     .map((m) => m.drive_folder_id);
 
+  for (const driveId of programsToDeactivate) {
+    const p = dbProgramsByDriveId.get(driveId);
+    if (!p) continue;
+    changes.push({
+      entity_type: "program",
+      entity_drive_id: driveId,
+      change_type: "removed",
+      old_value: { nome: p.nome },
+      new_value: null,
+      label: `Programa removido: "${p.nome}"`,
+    });
+  }
   for (const driveId of tracksToDeactivate) {
     const t = dbTracksByDriveId.get(driveId);
     if (!t) continue;
@@ -388,9 +469,11 @@ export function diffTrilha(mapped: MappedTrilha, db: DbSnapshot): SyncPlan {
   return {
     changes,
     warnings,
+    programUpserts,
     trackUpserts,
     phaseUpserts,
     moduleUpserts,
+    programsToDeactivate,
     tracksToDeactivate,
     phasesToDeactivate,
     modulesToDeactivate,

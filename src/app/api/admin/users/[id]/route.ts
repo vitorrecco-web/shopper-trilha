@@ -20,12 +20,13 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     return NextResponse.json({ ok: false, error: "Usuário não encontrado." }, { status: 404 });
   }
 
+  const programId = user.program_id ?? null;
   const [phases, modules, userModules, attempts, progress] = await Promise.all([
-    listActivePhases(),
-    listActiveModulesForTrack(user.track_id ?? null),
+    programId ? listActivePhases(programId) : Promise.resolve([]),
+    programId ? listActiveModulesForTrack(programId, user.track_id ?? null) : Promise.resolve([]),
     listUserModules(user.id),
     listAttemptsForUser(user.id),
-    computeUserProgress(user.id, user.track_id ?? null),
+    computeUserProgress(user.id, programId, user.track_id ?? null),
   ]);
 
   // Ordenar por ordem da FASE, depois ordem do módulo dentro dela —

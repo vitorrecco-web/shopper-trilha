@@ -18,7 +18,7 @@ export async function POST(_request: Request, { params }: { params: { id: string
   if ("response" in auth) return auth.response;
   const { user } = auth;
 
-  const access = await getModuleAccessInfo(user.id, user.track_id, params.id);
+  const access = await getModuleAccessInfo(user.id, user.program_id, user.track_id, params.id);
   if (!access || !access.unlocked || access.module.material_type !== "youtube") {
     return NextResponse.json({ ok: false, error: "Módulo não disponível." }, { status: 404 });
   }
@@ -36,7 +36,7 @@ export async function POST(_request: Request, { params }: { params: { id: string
   }
 
   await markCompletedWithoutQuiz(user.id, access.module.id);
-  await unlockNextModule(user.id, user.track_id, access.module.id);
+  await unlockNextModule(user.id, user.program_id, user.track_id, access.module.id);
 
   return NextResponse.json({
     ok: true,

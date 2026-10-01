@@ -153,28 +153,44 @@ Isto é para quem for adicionar/editar conteúdo depois — não precisa saber p
 ### Estrutura de pastas
 
 ```
-Trilha de Liderança/                    <- pasta raiz (GOOGLE_DRIVE_ROOT_FOLDER_ID)
-├── Fase 1 - Conhecimento técnico/      <- "Fase N - assunto"
-│   ├── Supervisor de Picking/          <- uma pasta por função (só na Fase 1)
+Universidade Shopper/                   <- pasta raiz (GOOGLE_DRIVE_ROOT_FOLDER_ID)
+├── Trilha de Liderança/                <- um Programa (nome livre, sem prefixo numerado)
+│   ├── Fase 1 - Conhecimento técnico/  <- "Fase N - assunto"
+│   │   ├── Supervisor de Picking/      <- uma pasta por função (hoje só na Fase 1)
+│   │   │   ├── Módulo 1/
+│   │   │   │   ├── Nome do conteúdo.pdf    <- vira o título exibido ao aluno
+│   │   │   │   └── perguntas.json          <- opcional
+│   │   │   ├── Módulo 2/
+│   │   ├── Supervisor de Packing/
+│   ├── Fase 2 - CLT e regras internas/ <- fase comum: módulos direto, sem função
 │   │   ├── Módulo 1/
-│   │   │   ├── Nome do conteúdo.pdf    <- vira o título exibido ao aluno
-│   │   │   └── perguntas.json          <- opcional
-│   │   ├── Módulo 2/
-│   ├── Supervisor de Packing/
-├── Fase 2 - CLT e regras internas/     <- fase comum: módulos direto, sem função
-│   ├── Módulo 1/
-│   │   └── Nome do conteúdo.pdf
+│   │   │   └── Nome do conteúdo.pdf
+├── Trilha de Logística/                <- outro Programa, independente, mesma convenção por dentro
+│   ├── Fase 1 - ...
 ```
 
 ### Regras que o sistema espera
 
-- O nome da pasta da fase precisa começar com **"Fase N - "** (com um número e um hífen); o texto depois do hífen vira o nome exibido da fase.
+- O nome da pasta de **Programa** (direto abaixo da raiz) é livre — vira o nome exibido do Programa, sem prefixo numerado (Programas não têm ordem sequencial entre si; cada colaborador pertence a só um).
+- O nome da pasta da fase precisa começar com **"Fase N - "** (com um número e um hífen); o texto depois do hífen vira o nome exibido da fase. A numeração só precisa ser única **dentro do mesmo Programa** — dois Programas podem ter cada um a sua "Fase 1".
 - O nome da pasta do módulo precisa começar com **"Módulo N"**; esse número só define a ordem — o **título exibido ao aluno vem do nome do arquivo PDF**, sem a extensão `.pdf`.
 - Cada módulo precisa ter **exatamente 1 PDF**. Se tiver 0 ou mais de 1, a sincronização mostra um aviso e não deixa o módulo pronto para publicar.
 - `perguntas.json` é opcional. Quando existe, precisa seguir exatamente o formato de `perguntas-modelo.json` (4 alternativas por pergunta, resposta certa apontando para o `id` de uma alternativa). Se o arquivo estiver malformado, a sincronização avisa e o módulo é publicado **sem** perguntas até alguém corrigir o arquivo — nunca quebra a trilha inteira.
-- Só a **Fase 1** tem a camada extra de "função" (Supervisor de Picking, de Packing, etc). Da Fase 2 em diante, os módulos ficam direto dentro da fase e valem para todo mundo.
-- Renomear ou reordenar uma pasta existente é seguro — o sistema identifica cada fase/módulo/trilha pelo ID interno do Drive, não pelo nome. Só **excluir uma pasta e criar outra do zero** é que conta como conteúdo novo.
+- A camada extra de "função" (Supervisor de Picking, de Packing, etc) pode existir em qualquer fase de qualquer Programa — hoje só é usada na Fase 1 da Trilha de Liderança. Numa fase sem essa camada, os módulos ficam direto dentro dela e valem para todo mundo daquele Programa.
+- Renomear ou reordenar uma pasta existente é seguro — o sistema identifica cada Programa/fase/módulo/trilha pelo ID interno do Drive, não pelo nome. Só **excluir uma pasta e criar outra do zero** é que conta como conteúdo novo. Isso vale inclusive para **mover** um Programa inteiro para dentro de uma nova pasta raiz (o cenário usado para migrar de uma única trilha para a Universidade Shopper) — o ID não muda, a sincronização reconhece tudo.
 - Remover uma pasta (ou movê-la pra fora da estrutura) faz o conteúdo sumir da trilha dos alunos, mas o histórico de quem já tinha acessado/concluído continua no banco.
+
+### Universidade Shopper — múltiplos Programas (migração de uma trilha única)
+
+Quem já tinha o sistema rodando com uma única trilha (`GOOGLE_DRIVE_ROOT_FOLDER_ID` apontando direto para as pastas `Fase N - ...`) precisa, uma única vez:
+
+1. Aplicar as migrations `0007_programs.sql` e, depois do passo 2, `0008_programs_not_null.sql`.
+2. Rodar `node --env-file=.env.local scripts/bootstrap-program.mjs "Nome da Trilha Atual" ID_ATUAL_DO_GOOGLE_DRIVE_ROOT_FOLDER_ID` — cria o primeiro Programa e associa a ele tudo que já existe (fases, funções, usuários). Idempotente.
+3. No Drive: criar a pasta raiz `Universidade Shopper/` e mover a pasta da trilha atual para dentro dela (o ID interno não muda).
+4. Atualizar `GOOGLE_DRIVE_ROOT_FOLDER_ID` (local e na Vercel) para o ID da nova pasta `Universidade Shopper/` e redeployar.
+5. Em `/admin/drive`, **Analisar alterações**: o Programa existente deve aparecer sem nenhuma mudança de conteúdo (mesmos IDs, só reorganizado) — só então **Confirmar e sincronizar**.
+
+Um Programa novo (segunda trilha em diante) não precisa de nenhum passo de banco — basta criar a pasta dele dentro de `Universidade Shopper/` seguindo a mesma convenção, e sincronizar.
 
 ### Como aplicar uma mudança
 

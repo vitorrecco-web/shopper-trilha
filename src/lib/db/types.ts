@@ -10,11 +10,28 @@ export type UserRole = "admin" | "student";
 export type UserStatus = "active" | "inactive";
 export type PhaseType = "specific_track" | "common";
 export type SyncStatus = "preview" | "confirmed" | "completed" | "failed" | "cancelled";
-export type SyncEntityType = "track" | "phase" | "module" | "pdf" | "questions";
+export type SyncEntityType = "program" | "track" | "phase" | "module" | "pdf" | "questions";
 export type SyncChangeType = "added" | "removed" | "renamed" | "reordered" | "updated" | "warning";
+
+/**
+ * Programa = uma trilha de treinamento completa e independente (ex:
+ * "Trilha de Liderança", "Trilha de Logística") — Universidade Shopper.
+ * Não confundir com `Track` (função/cargo, ex: "Supervisor de Picking"),
+ * que só existe DENTRO de um Programa, para variar fases específicas
+ * dele (hoje só a Fase 1 usa isso).
+ */
+export interface Program {
+  id: string;
+  drive_folder_id: string;
+  nome: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface Track {
   id: string;
+  program_id: string;
   drive_folder_id: string;
   nome: string;
   active: boolean;
@@ -28,6 +45,8 @@ export interface User {
   matricula: string | null;
   login: string;
   password_hash: string;
+  /** Nullable — admin não pertence a um Programa específico (mesmo padrão de `track_id`). */
+  program_id: string | null;
   track_id: string | null;
   cd: string | null;
   turno: string | null;
@@ -40,6 +59,7 @@ export interface User {
 
 export interface Phase {
   id: string;
+  program_id: string;
   drive_folder_id: string;
   nome: string;
   ordem: number;
