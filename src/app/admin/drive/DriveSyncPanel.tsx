@@ -123,6 +123,31 @@ interface ProgramGroup {
   changes: ChangeItem[];
 }
 
+interface WarningGroup {
+  key: string;
+  programNome: string | null;
+  items: string[];
+}
+
+/** `mapUniversidadeFromDrive` prefixa cada aviso de dentro de um Programa com `Programa "X" > ...` (trilhaMapper.ts) — usado aqui só para agrupar na UI, sem precisar de nenhum campo estruturado novo vindo da API. Um aviso sem esse prefixo (ex: pasta raiz vazia) cai no grupo "Geral". */
+function groupWarnings(warnings: string[]): WarningGroup[] {
+  const order: string[] = [];
+  const map = new Map<string, { programNome: string | null; items: string[] }>();
+
+  for (const w of warnings) {
+    const match = /^Programa "([^"]+)" > ([\s\S]*)$/.exec(w);
+    const key = match ? match[1] : "__geral__";
+    const detail = match ? match[2] : w;
+    if (!map.has(key)) {
+      map.set(key, { programNome: match ? match[1] : null, items: [] });
+      order.push(key);
+    }
+    map.get(key)!.items.push(detail);
+  }
+
+  return order.map((key) => ({ key, ...map.get(key)! }));
+}
+
 /** Seção colapsável de um Programa — junta "estrutura lida" e "mudanças detectadas" daquele Programa só, em vez de duas listas globais gigantes. */
 function ProgramSection({
   group,
@@ -219,6 +244,67 @@ function ProgramSection({
   );
 }
 
+/** Seção colapsável de avisos de UM Programa (ou "Geral") — mesmo padrão de `ProgramSection`, para a lista de avisos não ficar uma parede de texto quando há muitos. */
+function WarningSection({
+  group,
+  expanded,
+  onToggle,
+}: {
+  group: WarningGroup;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div style={{ border: `1px solid ${theme.color.border}`, borderRadius: theme.radius.md, marginBottom: 8 }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          width: "100%",
+          background: "transparent",
+          border: "none",
+          padding: theme.space(2),
+          cursor: "pointer",
+          textAlign: "left",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span
+            style={{
+              display: "inline-block",
+              transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+              transition: "transform 0.15s",
+              color: theme.color.textFaint,
+              fontSize: 11,
+            }}
+          >
+            ▶
+          </span>
+          <b style={{ fontSize: theme.font.size.sm, color: theme.color.text }}>
+            {group.programNome ?? "Geral"}
+          </b>
+        </div>
+        <Badge tone="warning">
+          {group.items.length} aviso{group.items.length === 1 ? "" : "s"}
+        </Badge>
+      </button>
+
+      {expanded && (
+        <ul style={{ fontSize: 12.5, color: theme.color.warning, margin: 0, padding: `0 ${theme.space(3)} ${theme.space(2)} 30px` }}>
+          {group.items.map((w, i) => (
+            <li key={i} style={{ marginBottom: 4 }}>
+              {w}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /**
  * Painel único de Drive + sincronização. "Analisar alterações" busca, em
  * paralelo, a estrutura lida do Drive (GET .../drive/preview) e o diff
@@ -238,6 +324,7 @@ export function DriveSyncPanel() {
   const [confirming, setConfirming] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expandedWarnings, setExpandedWarnings] = useState<Set<string>>(new Set());
 
   async function handleAnalyze() {
     setAnalyzing(true);
@@ -246,6 +333,7 @@ export function DriveSyncPanel() {
     setStructure(null);
     setSyncPreview(null);
     setExpanded(new Set());
+    setExpandedWarnings(new Set());
     try {
       const [structRes, syncRes] = await Promise.all([
         fetch("/api/admin/drive/preview").then((r) => r.json()),
@@ -291,9 +379,19 @@ export function DriveSyncPanel() {
     });
   }
 
+  function toggleWarningGroup(key: string) {
+    setExpandedWarnings((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
   const hasAnalysis = Boolean(structure || syncPreview);
   const changes = useMemo(() => syncPreview?.changes ?? [], [syncPreview]);
   const warnings = syncPreview?.warnings ?? [];
+  const warningGroups = useMemo(() => groupWarnings(warnings), [warnings]);
 
   // Junta "estrutura lida" (por Programa) com as mudanças de cada Programa
   // numa lista só — inclui também Programas que só aparecem nas mudanças
@@ -358,17 +456,22 @@ export function DriveSyncPanel() {
 
           {/* Avisos preservados: módulo sem PDF, perguntas.json inválido,
               pasta fora do padrão, colisão de ordem, etc — vindos do
-              mesmo /api/admin/sync/preview de antes. */}
+              mesmo /api/admin/sync/preview de antes. Agrupados por
+              Programa (dropdown colapsável) em vez de uma lista única,
+              que ficava enorme com muitos Programas. */}
           <div style={{ ...boxStyle, marginBottom: theme.space(5) }}>
             <b style={{ fontSize: theme.font.size.base, color: theme.color.text }}>Avisos ({warnings.length})</b>
-            {warnings.length > 0 ? (
-              <ul style={{ fontSize: 12.5, color: theme.color.warning, marginTop: 8, paddingLeft: 18 }}>
-                {warnings.map((w, i) => (
-                  <li key={i} style={{ marginBottom: 4 }}>
-                    {w}
-                  </li>
+            {warningGroups.length > 0 ? (
+              <div style={{ marginTop: 8 }}>
+                {warningGroups.map((group) => (
+                  <WarningSection
+                    key={group.key}
+                    group={group}
+                    expanded={expandedWarnings.has(group.key)}
+                    onToggle={() => toggleWarningGroup(group.key)}
+                  />
                 ))}
-              </ul>
+              </div>
             ) : (
               <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, marginTop: 8 }}>Nenhum aviso.</p>
             )}
