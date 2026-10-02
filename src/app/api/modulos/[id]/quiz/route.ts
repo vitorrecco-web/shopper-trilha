@@ -105,6 +105,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   // quiz, aprovado ou não (a regra de 70% travaria quem reprova cedo e a
   // análise ficaria incompleta).
   let isRecruitment = false;
+  let summaryReady = false;
 
   if (!viewOnly) {
     // Tarefa 9: registra a tentativa com snapshot completo — histórico
@@ -121,7 +122,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     });
 
     // Grava o resultado já com a área/nomes da época (não derruba o envio se falhar).
-    isRecruitment = (await onQuizAttemptRecorded(attempt, access.module)).isRecruitment;
+    const recruitment = await onQuizAttemptRecorded(attempt, access.module);
+    isRecruitment = recruitment.isRecruitment;
+    summaryReady = recruitment.summaryReady;
 
     // Tarefas 10-11: só em caso de aprovação — nunca em reprovação, o que
     // já garante "nova tentativa não remove aprovação anterior" e "nota
@@ -153,5 +156,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     nextModuleId: canAdvance ? access.nextModuleId : null,
     nextModuleNome: canAdvance ? access.nextModuleNome : null,
     canAdvance,
+    // Recrutamento: o teste de lógica está completo — o resumo do colaborador já pode ser aberto.
+    summaryReady,
   });
 }

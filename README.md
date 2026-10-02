@@ -575,3 +575,10 @@ A trilha de Recrutamento Interno mede o desempenho dos candidatos (teste de lóg
 - **Interesse:** ao entrar na trilha de Recrutamento o candidato escolhe a(s) vaga(s) de interesse (ou "ainda não sei"); pode alterar pelo link na home.
 - **Resiliência:** se a migration ainda não foi aplicada, nada quebra para o aluno (as leituras de recrutamento degradam em silêncio).
 - Próximas etapas: relatório do gestor em Indicadores e resumo do colaborador.
+
+### Recrutamento Interno — relatório do gestor e resumo do colaborador (Etapas B e C)
+
+- **Relatório** (`/admin/indicadores/recrutamento`, admin e analyst): cartões (candidatos, concluíram, nota média nas duas leituras), **encaixe por vaga** (atinge / quase / abaixo, melhor tentativa × média de todas) e lista de candidatos com filtros (vaga, encaixe, só quem concluiu, só interesse × aptidão em alerta). Clique no candidato para o **detalhe**: nota por habilidade, afinidade por área, encaixe por vaga nas duas leituras, pontos fortes/a desenvolver e o **histórico de fotografias** da avaliação.
+- **Regras** (`src/lib/services/recruitmentAnalysis.ts`, função pura testada em `scripts/test-recruitment-analysis.mts` com `npx tsx`): nota da área = % de acertos ponderado pelo nº de questões; "quase" = até 10 pontos abaixo do corte; ponto forte >= 80, a desenvolver < 60; melhor possibilidade = vagas que atingem, ordenadas pela nota na área da vaga; análise só conclusiva com todos os módulos do teste de lógica feitos (antes: "em andamento n/7").
+- **Fotografia da avaliação:** quando o teste de lógica está completo, cada nova tentativa grava um `recruitment_assessments` com as vagas e os cortes vigentes na data (histórico não muda se os cortes mudarem depois).
+- **Resumo do colaborador** (`/app/recrutamento/resumo`; link na home e ao concluir o teste de lógica): melhores possibilidades, pontos fortes e o que treinar — em tom positivo e **sem notas de corte**, com aviso de que a decisão final considera dinâmica e entrevista. Usa a visão "melhor tentativa"; texto por regras (sem IA).

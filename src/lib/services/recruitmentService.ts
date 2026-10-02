@@ -1,5 +1,6 @@
 import "server-only";
 import type { Module, QuizAttempt, Vacancy } from "@/lib/db/types";
+import { snapshotAssessmentIfComplete } from "./recruitmentReportService";
 import { listActivePrograms } from "@/lib/repositories/programsRepository";
 import { getPhaseById, listActivePhases } from "@/lib/repositories/phasesRepository";
 import { listModulesByPhase } from "@/lib/repositories/modulesRepository";
@@ -59,14 +60,18 @@ export async function isRecruitmentModule(module: Module): Promise<boolean> {
  * gravar o resultado NUNCA derruba o envio do quiz (só é logada) — o
  * preenchimento ao etiquetar/reprocessar repõe qualquer lacuna.
  */
-export async function onQuizAttemptRecorded(attempt: QuizAttempt, module: Module): Promise<{ isRecruitment: boolean }> {
+export async function onQuizAttemptRecorded(
+  attempt: QuizAttempt,
+  module: Module
+): Promise<{ isRecruitment: boolean; summaryReady: boolean }> {
   try {
     const programId = await getRecruitmentProgramId();
-    if (!programId) return { isRecruitment: false };
+    if (!programId) return { isRecruitment: false, summaryReady: false };
 
     const phase = await getPhaseById(module.phase_id);
-    if (!phase || phase.program_id !== programId) return { isRecruitment: false };
+    if (!phase || phase.program_id !== programId) return { isRecruitment: false, summaryReady: false };
 
+    let summaryReady = false;
     const area = await getPhaseArea(phase.id);
     if (area) {
       await insertResults([
@@ -85,17 +90,19 @@ export async function onQuizAttemptRecorded(attempt: QuizAttempt, module: Module
           submitted_at: attempt.submitted_at ?? new Date().toISOString(),
         },
       ]);
+      // Foto da avaliação (cortes/vagas vigentes hoje) quando o teste de lógica está completo.
+      summaryReady = await snapshotAssessmentIfComplete(attempt.user_id);
     }
-    return { isRecruitment: true };
+    return { isRecruitment: true, summaryReady };
   } catch (err) {
     console.error("Erro ao registrar resultado de recrutamento:", err instanceof Error ? err.message : err);
     // Na dúvida, trata como recrutamento só se o Programa bate — evita bloquear candidato por falha de gravação.
     try {
       const programId = await getRecruitmentProgramId();
       const phase = await getPhaseById(module.phase_id);
-      return { isRecruitment: Boolean(programId && phase && phase.program_id === programId) };
+      return { isRecruitment: Boolean(programId && phase && phase.program_id === programId), summaryReady: false };
     } catch {
-      return { isRecruitment: false };
+      return { isRecruitment: false, summaryReady: false };
     }
   }
 }

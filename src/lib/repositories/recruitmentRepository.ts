@@ -190,3 +190,30 @@ export async function listAllResults(): Promise<RecruitmentResult[]> {
   if (error) throw error;
   return (data ?? []).map(toResult);
 }
+
+/* ------------------------- fotografias de avaliação ------------------------ */
+
+export interface AssessmentRow {
+  id: string;
+  user_id: string;
+  generated_at: string;
+  payload: Record<string, unknown>;
+}
+
+/** Append-only: cada avaliação gerada vira uma linha nova, nunca é sobrescrita. */
+export async function insertAssessment(userId: string, payload: Record<string, unknown>): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from("recruitment_assessments").insert({ user_id: userId, payload });
+  if (error) throw error;
+}
+
+export async function listAssessmentsForUser(userId: string): Promise<AssessmentRow[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("recruitment_assessments")
+    .select("*")
+    .eq("user_id", userId)
+    .order("generated_at", { ascending: false });
+  if (error) throw error;
+  return data as AssessmentRow[];
+}

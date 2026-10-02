@@ -67,6 +67,10 @@ export default async function AppHomePage() {
             <Link href="/app/recrutamento/interesse" style={{ color: theme.color.primaryDark, fontWeight: 600 }}>
               alterar
             </Link>
+            {" · "}
+            <Link href="/app/recrutamento/resumo" style={{ color: theme.color.primaryDark, fontWeight: 600 }}>
+              Meu resumo de vagas
+            </Link>
           </p>
         )}
         <TrilhaAccordion

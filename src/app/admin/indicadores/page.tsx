@@ -64,6 +64,18 @@ export default async function IndicadoresPage() {
           lista completa, com busca e filtros.
         </p>
 
+        <div style={{ ...boxStyle, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <h2 style={{ fontSize: theme.font.size.md, margin: 0, color: theme.color.text }}>Recrutamento Interno</h2>
+            <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: "4px 0 0" }}>
+              Aptidão dos candidatos por vaga: nota do teste de lógica, afinidade por área e interesse × aptidão.
+            </p>
+          </div>
+          <Link href="/admin/indicadores/recrutamento" style={linkStyle}>
+            Abrir análise →
+          </Link>
+        </div>
+
         <div
           style={{
             display: "grid",

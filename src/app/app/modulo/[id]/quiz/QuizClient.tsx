@@ -45,6 +45,8 @@ interface SubmitResult {
   nextModuleNome: string | null;
   /** Recrutamento Interno: o próximo módulo abre mesmo reprovando. */
   canAdvance?: boolean;
+  /** Recrutamento: teste de lógica completo — link para o resumo. */
+  summaryReady?: boolean;
   error?: string;
 }
 
@@ -229,6 +231,24 @@ export function QuizClient({
             </p>
           )}
         </div>
+
+        {result.summaryReady && (
+          <div
+            style={{
+              padding: 14,
+              borderRadius: theme.radius.md,
+              background: theme.color.infoBg,
+              marginBottom: 16,
+              fontSize: 14,
+              color: theme.color.infoText,
+            }}
+          >
+            Você concluiu o teste de lógica!{" "}
+            <Link href="/app/recrutamento/resumo" style={{ color: theme.color.primaryDark, fontWeight: 700 }}>
+              Ver meu resumo de vagas →
+            </Link>
+          </div>
+        )}
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 24 }}>
           <Button variant="secondary" onClick={() => setReviewing((r) => !r)}>
