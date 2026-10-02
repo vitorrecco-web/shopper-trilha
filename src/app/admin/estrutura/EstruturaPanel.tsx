@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { theme } from "@/lib/ui/theme";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { MaterialForm } from "./MaterialForm";
+import { QuestionsEditor } from "./QuestionsEditor";
 
 interface TreeModule {
   id: string;
@@ -12,6 +13,8 @@ interface TreeModule {
   nome: string;
   hasMaterial: boolean;
   hasQuestions: boolean;
+  materialType: "pdf" | "youtube";
+  videoExternalId: string | null;
 }
 interface TreeTrack {
   id: string;
@@ -41,6 +44,9 @@ type FormState =
   | { type: "create-module"; phaseId: string; trackId: string | null }
   | { type: "rename"; kind: Kind; id: string; current: string }
   | { type: "remove"; kind: Kind; id: string; label: string };
+
+/** Painel aberto embaixo de um módulo: enviar material ou editar perguntas. */
+type ModulePanel = { moduleId: string; kind: "material" | "perguntas" };
 
 const boxStyle: React.CSSProperties = {
   background: theme.color.surface,
@@ -194,6 +200,7 @@ export function EstruturaPanel() {
   const [form, setForm] = useState<FormState | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  const [panel, setPanel] = useState<ModulePanel | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -229,7 +236,12 @@ export function EstruturaPanel() {
     if (ensureExpanded) setExpanded((prev) => new Set(prev).add(ensureExpanded));
   }
 
-  async function send(method: "POST" | "PATCH" | "DELETE", path: string, body: unknown, successMessage: string) {
+  async function send(
+    method: "POST" | "PATCH" | "DELETE",
+    path: string,
+    body: unknown,
+    successMessage: string
+  ): Promise<Record<string, unknown> | null> {
     setBusy(true);
     setNotice(null);
     try {
@@ -241,13 +253,15 @@ export function EstruturaPanel() {
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setNotice({ ok: false, message: data.error ?? "Não foi possível concluir a ação." });
-        return;
+        return null;
       }
       setForm(null);
       setNotice({ ok: true, message: successMessage });
       await load();
+      return data as Record<string, unknown>;
     } catch {
       setNotice({ ok: false, message: "Erro de conexão. Tente novamente." });
+      return null;
     } finally {
       setBusy(false);
     }
@@ -284,6 +298,10 @@ export function EstruturaPanel() {
     );
   }
 
+  function togglePanel(moduleId: string, kind: ModulePanel["kind"]) {
+    setPanel((prev) => (prev && prev.moduleId === moduleId && prev.kind === kind ? null : { moduleId, kind }));
+  }
+
   function renderModuleRow(m: TreeModule) {
     return (
       <div key={m.id} style={{ padding: "6px 0", borderTop: `1px solid ${theme.color.border}` }}>
@@ -294,9 +312,12 @@ export function EstruturaPanel() {
             {m.hasQuestions && <Badge tone="primary">com perguntas</Badge>}
           </span>
           <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
-            <Link href="/admin/conteudo" style={{ fontSize: theme.font.size.xs, fontWeight: 600, color: theme.color.primaryDark }}>
-              Conteúdo
-            </Link>
+            <TextButton onClick={() => togglePanel(m.id, "material")}>
+              {panel?.moduleId === m.id && panel.kind === "material" ? "Fechar material" : "Material"}
+            </TextButton>
+            <TextButton onClick={() => togglePanel(m.id, "perguntas")}>
+              {panel?.moduleId === m.id && panel.kind === "perguntas" ? "Fechar perguntas" : "Perguntas"}
+            </TextButton>
             <TextButton onClick={() => open({ type: "rename", kind: "modulo", id: m.id, current: m.nome })}>Renomear</TextButton>
             <TextButton danger onClick={() => open({ type: "remove", kind: "modulo", id: m.id, label: m.nome })}>
               Remover
@@ -305,6 +326,18 @@ export function EstruturaPanel() {
         </div>
         {renameForm("modulo", m.id)}
         {removeForm("modulo", m.id)}
+        {panel?.moduleId === m.id && panel.kind === "material" && (
+          <MaterialForm
+            key={`material-${m.id}`}
+            module={{ id: m.id, nome: m.nome, hasMaterial: m.hasMaterial, materialType: m.materialType, videoExternalId: m.videoExternalId }}
+            onSaved={() => void load()}
+          />
+        )}
+        {panel?.moduleId === m.id && panel.kind === "perguntas" && (
+          <div style={{ margin: "8px 0" }}>
+            <QuestionsEditor key={`perguntas-${m.id}`} moduleId={m.id} onSaved={() => void load()} />
+          </div>
+        )}
       </div>
     );
   }
@@ -318,9 +351,10 @@ export function EstruturaPanel() {
         submitLabel="Criar módulo"
         busy={busy}
         onCancel={() => setForm(null)}
-        onSubmit={(titulo) =>
-          send("POST", "/api/admin/estrutura/modulos", { phaseId, trackId, titulo }, "Módulo criado. Agora adicione o material em Conteúdo dos módulos.")
-        }
+        onSubmit={async (titulo) => {
+          const data = await send("POST", "/api/admin/estrutura/modulos", { phaseId, trackId, titulo }, "Módulo criado. Envie o material dele logo abaixo.");
+          if (data && typeof data.id === "string") setPanel({ moduleId: data.id, kind: "material" });
+        }}
       />
     );
   }

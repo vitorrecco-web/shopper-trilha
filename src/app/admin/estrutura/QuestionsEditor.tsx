@@ -4,28 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { theme } from "@/lib/ui/theme";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { ModulePicker } from "../_components/ModulePicker";
-
-interface ModuleOption {
-  id: string;
-  nome: string;
-  ordem: number;
-  programId: string | null;
-  programNome: string | null;
-  faseNome: string | null;
-  faseOrdem: number;
-  phaseType: "common" | "specific_track";
-  trackNome: string | null;
-  hasQuestionsFile: boolean;
-  hasQuestions: boolean;
-  active: boolean;
-}
-
-interface ModulosResult {
-  ok: boolean;
-  modules?: ModuleOption[];
-  error?: string;
-}
 
 interface CarregarResult {
   ok: boolean;
@@ -196,10 +174,14 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 600,
 };
 
-export function PerguntasEditorPanel() {
-  const [modules, setModules] = useState<ModuleOption[] | null>(null);
-  const [modulesError, setModulesError] = useState<string | null>(null);
-  const [selectedModuleId, setSelectedModuleId] = useState<string>("");
+/**
+ * Editor visual de perguntas de UM módulo, embutido em Admin > Estrutura das
+ * trilhas (o módulo vem da própria árvore; use `key={moduleId}` ao montar
+ * para o estado reiniciar a cada módulo). `onSaved` avisa a árvore para
+ * atualizar os selos ("com perguntas").
+ */
+export function QuestionsEditor({ moduleId, onSaved }: { moduleId: string; onSaved?: () => void }) {
+  const selectedModuleId = moduleId;
 
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -219,25 +201,9 @@ export function PerguntasEditorPanel() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/admin/perguntas/modulos");
-        const data: ModulosResult = await res.json();
-        if (cancelled) return;
-        if (!res.ok || !data.ok) {
-          setModulesError(data.error ?? "Não foi possível listar os módulos agora.");
-          return;
-        }
-        setModules(data.modules ?? []);
-      } catch {
-        if (!cancelled) setModulesError("Erro de conexão.");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    void handleLoad(moduleId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moduleId]);
 
   // Validação em tempo real, com debounce — mesma validatePerguntasJson do backend.
   useEffect(() => {
@@ -272,7 +238,6 @@ export function PerguntasEditorPanel() {
   }, [perguntas]);
 
   async function handleLoad(moduleId: string) {
-    setSelectedModuleId(moduleId);
     setPerguntas(null);
     setModuleNome(null);
     setIsNewFile(false);
@@ -390,9 +355,7 @@ export function PerguntasEditorPanel() {
           : `Salvo no Drive com sucesso (${count} pergunta${count === 1 ? "" : "s"}). Já vale para o próximo quiz respondido.`,
       });
       setIsNewFile(false);
-      setModules((prev) =>
-        prev ? prev.map((m) => (m.id === selectedModuleId ? { ...m, hasQuestionsFile: true, hasQuestions: true } : m)) : prev
-      );
+      onSaved?.();
     } catch {
       setSaveResult({ ok: false, message: "Erro de conexão ao salvar." });
     } finally {
@@ -405,34 +368,6 @@ export function PerguntasEditorPanel() {
 
   return (
     <div>
-      <div style={boxStyle}>
-        <label style={labelStyle}>Módulo</label>
-        {modulesError && (
-          <p role="alert" style={{ color: theme.color.danger, fontSize: theme.font.size.sm, marginBottom: 8 }}>
-            {modulesError}
-          </p>
-        )}
-        {modules === null && !modulesError ? (
-          <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted }}>Carregando módulos...</p>
-        ) : (
-          <>
-            <ModulePicker
-              modules={modules ?? []}
-              selectedId={selectedModuleId}
-              disabled={loading}
-              onSelect={(m) => handleLoad(m.id)}
-              renderBadges={(m) => (
-                <>
-                  {!m.hasQuestionsFile && <Badge tone="neutral">sem arquivo</Badge>}
-                  {m.hasQuestionsFile && !m.hasQuestions && <Badge tone="warning">inválido</Badge>}
-                  {!m.active && <Badge tone="neutral">inativo</Badge>}
-                </>
-              )}
-            />
-          </>
-        )}
-      </div>
-
       {loading && (
         <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted }}>Carregando perguntas...</p>
       )}

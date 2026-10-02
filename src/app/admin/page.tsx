@@ -33,21 +33,9 @@ const cards: HubCard[] = [
     adminOnly: true,
   },
   {
-    href: "/admin/perguntas",
-    title: "Editor de Perguntas",
-    description: "Editar e validar o perguntas.json dos módulos sem manipular JSON manualmente",
-    adminOnly: true,
-  },
-  {
     href: "/admin/estrutura",
     title: "Estrutura das trilhas",
-    description: "Criar e organizar Programas, Fases, Funções e Módulos direto pelo app",
-    adminOnly: true,
-  },
-  {
-    href: "/admin/conteudo",
-    title: "Conteúdo dos módulos",
-    description: "Adicionar ou trocar o PDF, a apresentação PowerPoint ou o vídeo do YouTube de cada módulo",
+    description: "Criar Programas, Fases, Funções e Módulos e, em cada módulo, enviar o material e editar as perguntas",
     adminOnly: true,
   },
   {

@@ -107,6 +107,8 @@ export interface TreeModule {
   nome: string;
   hasMaterial: boolean;
   hasQuestions: boolean;
+  materialType: "pdf" | "youtube";
+  videoExternalId: string | null;
 }
 export interface TreeTrack {
   id: string;
@@ -144,6 +146,8 @@ export async function getStructureTree(): Promise<TreeProgram[]> {
     nome: m.nome,
     hasMaterial: m.material_type === "youtube" ? Boolean(m.video_drive_id) : Boolean(m.pdf_drive_id),
     hasQuestions: m.has_questions,
+    materialType: m.material_type,
+    videoExternalId: m.video_external_id,
   });
 
   // Função não guarda a fase em que está (só o Programa) — a pasta da Função

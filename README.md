@@ -582,3 +582,12 @@ A trilha de Recrutamento Interno mede o desempenho dos candidatos (teste de lóg
 - **Regras** (`src/lib/services/recruitmentAnalysis.ts`, função pura testada em `scripts/test-recruitment-analysis.mts` com `npx tsx`): nota da área = % de acertos ponderado pelo nº de questões; "quase" = até 10 pontos abaixo do corte; ponto forte >= 80, a desenvolver < 60; melhor possibilidade = vagas que atingem, ordenadas pela nota na área da vaga; análise só conclusiva com todos os módulos do teste de lógica feitos (antes: "em andamento n/7").
 - **Fotografia da avaliação:** quando o teste de lógica está completo, cada nova tentativa grava um `recruitment_assessments` com as vagas e os cortes vigentes na data (histórico não muda se os cortes mudarem depois).
 - **Resumo do colaborador** (`/app/recrutamento/resumo`; link na home e ao concluir o teste de lógica): melhores possibilidades, pontos fortes e o que treinar — em tom positivo e **sem notas de corte**, com aviso de que a decisão final considera dinâmica e entrevista. Usa a visão "melhor tentativa"; texto por regras (sem IA).
+
+## Tudo do módulo num lugar só: Estrutura das trilhas
+
+Em `/admin/estrutura`, cada módulo agora tem os botões **Material** e **Perguntas**:
+
+- **Material** abre ali mesmo o envio de PDF, PowerPoint ou link do YouTube (o mesmo fluxo descrito em "Conteúdo dos módulos pelo app" acima).
+- **Perguntas** abre ali mesmo o editor visual de perguntas do módulo (criar, editar, validar e salvar o `perguntas.json` no Drive).
+- Ao **criar um módulo**, o painel de Material já abre sozinho para enviar o arquivo.
+- As telas separadas "Conteúdo dos módulos" (`/admin/conteudo`) e "Editor de Perguntas" (`/admin/perguntas`) saíram do painel; os endereços antigos redirecionam para a Estrutura. As rotas de API (`/api/admin/conteudo/*`, `/api/admin/perguntas/*`) continuam as mesmas.

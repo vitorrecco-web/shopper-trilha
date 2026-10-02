@@ -19,9 +19,9 @@ export default async function EstruturaAdminPage() {
         <h1 style={{ fontSize: theme.font.size.xxl, marginTop: 0, marginBottom: 4 }}>Estrutura das trilhas</h1>
         <p style={{ color: theme.color.textMuted, fontSize: theme.font.size.sm, marginBottom: theme.space(5) }}>
           Crie e organize <b>Programas</b>, <b>Fases</b>, <b>Funções</b> e <b>Módulos</b> direto pelo app. Cada item é
-          criado também como pasta no Drive (e a sincronização reconhece tudo sem mudanças). Depois de criar um
-          módulo, adicione o material dele em <b>Conteúdo dos módulos</b>. Remover manda a pasta para a lixeira do
-          Drive (reversível) e tira o item das trilhas.
+          criado também como pasta no Drive (e a sincronização reconhece tudo sem mudanças). Em cada módulo,
+          use <b>Material</b> para enviar o PDF, o PowerPoint ou o link do YouTube e <b>Perguntas</b> para criar ou
+          editar o quiz. Remover manda a pasta para a lixeira do Drive (reversível) e tira o item das trilhas.
         </p>
         <EstruturaPanel />
       </Container>
