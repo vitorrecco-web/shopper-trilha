@@ -2,16 +2,21 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminOrRespond } from "@/lib/auth/apiGuard";
-import { getModuleById, setModuleHasQuestions } from "@/lib/repositories/modulesRepository";
-import { updateDriveFileContent } from "@/lib/drive/googleDriveClient";
+import { getModuleById, setModuleHasQuestions, setModuleQuestionsDriveId } from "@/lib/repositories/modulesRepository";
+import { updateDriveFileContent, createDriveJsonFile } from "@/lib/drive/googleDriveClient";
 import { validatePerguntasJson } from "@/lib/drive/validatePerguntas";
 
 /**
- * Salva o perguntas.json editado direto no Drive (mesmo fileId do
- * módulo) — elimina o passo de baixar e fazer upload manual. Nunca
- * escreve no Drive sem validar antes com a MESMA `validatePerguntasJson`
- * usada pelo sync e pela rota /validar, para nunca publicar um JSON
- * inválido (que derrubaria o quiz do módulo para os alunos).
+ * Salva o perguntas.json editado direto no Drive — elimina o passo de
+ * baixar e fazer upload manual. Nunca escreve no Drive sem validar antes
+ * com a MESMA `validatePerguntasJson` usada pelo sync e pela rota
+ * /validar, para nunca publicar um JSON inválido (que derrubaria o quiz
+ * do módulo para os alunos).
+ *
+ * Se o módulo ainda não tem `questions_drive_id` (nunca teve perguntas.json
+ * mapeado), CRIA o arquivo dentro da pasta do módulo no Drive e grava o
+ * fileId novo no banco — permite editar/publicar perguntas em módulos de
+ * trilhas novas sem precisar criar o arquivo manualmente no Drive antes.
  */
 const bodySchema = z.object({
   moduleId: z.string().min(1),
@@ -47,16 +52,17 @@ export async function POST(request: NextRequest) {
   if (!module_) {
     return NextResponse.json({ ok: false, error: "Módulo não encontrado." }, { status: 404 });
   }
-  if (!module_.questions_drive_id) {
-    return NextResponse.json(
-      { ok: false, error: "Este módulo não possui perguntas.json mapeado no Drive." },
-      { status: 404 }
-    );
-  }
+
+  const isNewFile = !module_.questions_drive_id;
+  let driveId = module_.questions_drive_id;
 
   try {
     const content = JSON.stringify(validation.data, null, 2);
-    await updateDriveFileContent(module_.questions_drive_id, content);
+    if (isNewFile) {
+      driveId = await createDriveJsonFile(module_.drive_folder_id, "perguntas.json", content);
+    } else {
+      await updateDriveFileContent(driveId!, content);
+    }
   } catch (err) {
     console.error("Erro ao salvar perguntas.json no Drive:", err instanceof Error ? err.message : err);
 
@@ -86,13 +92,18 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await setModuleHasQuestions(module_.id, true);
+    if (isNewFile) {
+      await setModuleQuestionsDriveId(module_.id, driveId!, true);
+    } else {
+      await setModuleHasQuestions(module_.id, true);
+    }
   } catch (err) {
-    // O arquivo já foi salvo no Drive com sucesso — só a flag local do
-    // banco (has_questions) não atualizou. Próxima sincronização completa
-    // corrige sozinha; não é motivo para reportar falha ao admin.
-    console.error("Salvo no Drive, mas falhou ao atualizar has_questions:", err instanceof Error ? err.message : err);
+    // O arquivo já foi salvo/criado no Drive com sucesso — só o banco
+    // (questions_drive_id/has_questions) não atualizou. Próxima
+    // sincronização completa corrige sozinha; não é motivo para reportar
+    // falha ao admin.
+    console.error("Salvo no Drive, mas falhou ao atualizar o módulo:", err instanceof Error ? err.message : err);
   }
 
-  return NextResponse.json({ ok: true, questionCount: validation.data.perguntas.length });
+  return NextResponse.json({ ok: true, questionCount: validation.data.perguntas.length, isNew: isNewFile });
 }

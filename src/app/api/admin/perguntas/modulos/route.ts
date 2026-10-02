@@ -7,10 +7,12 @@ import { listAllTracks } from "@/lib/repositories/tracksRepository";
 import { listAllPrograms } from "@/lib/repositories/programsRepository";
 
 /**
- * Editor visual de perguntas (Admin) — lista só módulos que já têm um
- * perguntas.json mapeado do Drive (questions_drive_id preenchido),
- * incluindo os com validação atualmente inválida (has_questions=false),
- * para o admin poder abrir e corrigir.
+ * Editor visual de perguntas (Admin) — lista TODOS os módulos (com ou sem
+ * perguntas.json mapeado no Drive ainda). Um módulo sem arquivo é editável
+ * do mesmo jeito; "Salvar no Drive" cria o perguntas.json na pasta do
+ * módulo na primeira vez (ver /api/admin/perguntas/salvar). `hasQuestionsFile`
+ * diferencia os dois casos na lista; `hasQuestions` continua indicando se
+ * o arquivo MAPEADO hoje é válido.
  */
 export async function GET() {
   const guard = await requireAdminOrRespond();
@@ -33,7 +35,6 @@ export async function GET() {
     // alfabética espalha os módulos de uma mesma fase/trilha pela lista
     // inteira e torna impossível achar o que se procura (feedback do admin).
     const withQuiz = modules
-      .filter((m) => Boolean(m.questions_drive_id))
       .map((m) => {
         const phase = phaseById.get(m.phase_id);
         const program = phase ? programById.get(phase.program_id) : undefined;
@@ -41,11 +42,13 @@ export async function GET() {
           id: m.id,
           nome: m.nome,
           ordem: m.ordem,
+          programId: program?.id ?? null,
           programNome: program?.nome ?? null,
           faseNome: phase?.nome ?? null,
           faseOrdem: phase?.ordem ?? Number.MAX_SAFE_INTEGER,
           phaseType: phase?.phase_type ?? "common",
           trackNome: m.track_id ? (trackById.get(m.track_id)?.nome ?? null) : null,
+          hasQuestionsFile: Boolean(m.questions_drive_id),
           hasQuestions: m.has_questions,
           active: m.active,
         };

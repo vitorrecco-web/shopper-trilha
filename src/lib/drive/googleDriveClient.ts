@@ -157,3 +157,25 @@ export async function updateDriveFileContent(fileId: string, content: string): P
     supportsAllDrives: true,
   });
 }
+
+/**
+ * Cria um arquivo NOVO dentro de uma pasta de módulo — usado pelo editor
+ * visual de perguntas (Admin) quando o módulo ainda não tem nenhum
+ * perguntas.json no Drive (ex: trilha nova, cadastrada só com PDF/vídeo).
+ * Devolve o fileId recém-criado para ser gravado em
+ * `modules.questions_drive_id`.
+ */
+export async function createDriveJsonFile(folderId: string, name: string, content: string): Promise<string> {
+  const auth = getAuth();
+  const drive = google.drive({ version: "v3", auth });
+  const res = await drive.files.create({
+    requestBody: { name, parents: [folderId], mimeType: "application/json" },
+    media: { mimeType: "application/json", body: content },
+    fields: "id",
+    supportsAllDrives: true,
+  });
+  if (!res.data.id) {
+    throw new Error("O Drive não devolveu o id do arquivo recém-criado.");
+  }
+  return res.data.id;
+}

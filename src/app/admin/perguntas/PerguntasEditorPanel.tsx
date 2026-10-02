@@ -9,11 +9,13 @@ interface ModuleOption {
   id: string;
   nome: string;
   ordem: number;
+  programId: string | null;
   programNome: string | null;
   faseNome: string | null;
   faseOrdem: number;
   phaseType: "common" | "specific_track";
   trackNome: string | null;
+  hasQuestionsFile: boolean;
   hasQuestions: boolean;
   active: boolean;
 }
@@ -29,6 +31,7 @@ interface CarregarResult {
   moduleNome?: string;
   perguntasJson?: unknown;
   validation?: { ok: boolean; error?: string };
+  isNew?: boolean;
   error?: string;
 }
 
@@ -43,6 +46,7 @@ interface SalvarResult {
   ok: boolean;
   error?: string;
   questionCount?: number;
+  isNew?: boolean;
 }
 
 const ALT_IDS = ["a", "b", "c", "d"] as const;
@@ -154,12 +158,22 @@ function buildPayload(perguntas: EditorPergunta[]) {
   };
 }
 
-function groupLabelFor(m: ModuleOption): string {
-  const faseLabel =
-    m.phaseType === "common"
-      ? m.faseNome ?? "Sem fase"
-      : `${m.faseNome ?? "Sem fase"} · ${m.trackNome ?? "Sem trilha"}`;
-  return m.programNome ? `${m.programNome} · ${faseLabel}` : faseLabel;
+function faseLabelFor(m: ModuleOption): string {
+  return m.phaseType === "common"
+    ? m.faseNome ?? "Sem fase"
+    : `${m.faseNome ?? "Sem fase"} · ${m.trackNome ?? "Sem trilha"}`;
+}
+
+interface FaseGroup {
+  label: string;
+  items: ModuleOption[];
+}
+
+interface ProgramGroup {
+  programId: string;
+  programNome: string;
+  faseGroups: FaseGroup[];
+  count: number;
 }
 
 const boxStyle: React.CSSProperties = {
@@ -194,10 +208,12 @@ export function PerguntasEditorPanel() {
   const [modulesError, setModulesError] = useState<string | null>(null);
   const [moduleFilter, setModuleFilter] = useState("");
   const [selectedModuleId, setSelectedModuleId] = useState<string>("");
+  const [expandedPrograms, setExpandedPrograms] = useState<Set<string>>(new Set());
 
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [moduleNome, setModuleNome] = useState<string | null>(null);
+  const [isNewFile, setIsNewFile] = useState(false);
   const [perguntas, setPerguntas] = useState<EditorPergunta[] | null>(null);
 
   const [validating, setValidating] = useState(false);
@@ -232,11 +248,14 @@ export function PerguntasEditorPanel() {
     };
   }, []);
 
-  // Agrupado por fase (e trilha, quando a fase é específica de trilha) na
-  // ordem real da trilha (já vem ordenada assim da API) — com muitos
-  // módulos, uma lista plana em ordem alfabética torna quase impossível
-  // achar o módulo certo. A busca filtra por fase, trilha ou nome.
-  const moduleGroups = useMemo(() => {
+  // Acordeão de 2 níveis: Programa (colapsável, igual à tela de
+  // Drive/Sincronização) -> Fase/Trilha -> módulos, na ordem real da
+  // trilha (já vem ordenada assim da API). Com todos os módulos agora
+  // listados (não só os que já têm perguntas.json), uma lista plana ficaria
+  // enorme e poluída — colapsar por Programa resolve isso. A busca filtra
+  // por Programa, fase, trilha ou nome e expande automaticamente os
+  // Programas com resultado.
+  const programGroups = useMemo<ProgramGroup[]>(() => {
     if (!modules) return [];
     const term = normalizeSearch(moduleFilter.trim());
     const filtered = term
@@ -245,18 +264,46 @@ export function PerguntasEditorPanel() {
         )
       : modules;
 
-    const order: string[] = [];
-    const map = new Map<string, ModuleOption[]>();
+    const programOrder: string[] = [];
+    const programs = new Map<string, { nome: string; faseOrder: string[]; faseMap: Map<string, ModuleOption[]> }>();
+
     for (const m of filtered) {
-      const label = groupLabelFor(m);
-      if (!map.has(label)) {
-        map.set(label, []);
-        order.push(label);
+      const pid = m.programId ?? "sem-programa";
+      if (!programs.has(pid)) {
+        programs.set(pid, { nome: m.programNome ?? "Sem Programa", faseOrder: [], faseMap: new Map() });
+        programOrder.push(pid);
       }
-      map.get(label)!.push(m);
+      const prog = programs.get(pid)!;
+      const faseLabel = faseLabelFor(m);
+      if (!prog.faseMap.has(faseLabel)) {
+        prog.faseMap.set(faseLabel, []);
+        prog.faseOrder.push(faseLabel);
+      }
+      prog.faseMap.get(faseLabel)!.push(m);
     }
-    return order.map((label) => ({ label, items: map.get(label)! }));
+
+    return programOrder.map((pid) => {
+      const prog = programs.get(pid)!;
+      const faseGroups = prog.faseOrder.map((label) => ({ label, items: prog.faseMap.get(label)! }));
+      return {
+        programId: pid,
+        programNome: prog.nome,
+        faseGroups,
+        count: faseGroups.reduce((sum, g) => sum + g.items.length, 0),
+      };
+    });
   }, [modules, moduleFilter]);
+
+  const isSearching = moduleFilter.trim().length > 0;
+
+  function toggleProgram(programId: string) {
+    setExpandedPrograms((prev) => {
+      const next = new Set(prev);
+      if (next.has(programId)) next.delete(programId);
+      else next.add(programId);
+      return next;
+    });
+  }
 
   // Validação em tempo real, com debounce — mesma validatePerguntasJson do backend.
   useEffect(() => {
@@ -290,14 +337,18 @@ export function PerguntasEditorPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [perguntas]);
 
-  async function handleLoad(moduleId: string) {
+  async function handleLoad(moduleId: string, programId: string | null) {
     setSelectedModuleId(moduleId);
     setPerguntas(null);
     setModuleNome(null);
+    setIsNewFile(false);
     setLoadError(null);
     setValidation(null);
     setSaveResult(null);
     setConfirmingSave(false);
+    if (programId) {
+      setExpandedPrograms((prev) => new Set(prev).add(programId));
+    }
     if (!moduleId) return;
 
     setLoading(true);
@@ -310,6 +361,7 @@ export function PerguntasEditorPanel() {
       }
       setModuleNome(data.moduleNome ?? null);
       setPerguntas(toEditorPerguntas(data.perguntasJson));
+      setIsNewFile(Boolean(data.isNew));
       if (data.validation && !data.validation.ok) {
         setLoadError(`O perguntas.json atual deste módulo está inválido: ${data.validation.error}`);
       }
@@ -377,8 +429,14 @@ export function PerguntasEditorPanel() {
       const count = data.questionCount ?? perguntas.length;
       setSaveResult({
         ok: true,
-        message: `Salvo no Drive com sucesso (${count} pergunta${count === 1 ? "" : "s"}). Já vale para o próximo quiz respondido.`,
+        message: data.isNew
+          ? `perguntas.json criado no Drive com sucesso (${count} pergunta${count === 1 ? "" : "s"}). Já vale para o próximo quiz respondido.`
+          : `Salvo no Drive com sucesso (${count} pergunta${count === 1 ? "" : "s"}). Já vale para o próximo quiz respondido.`,
       });
+      setIsNewFile(false);
+      setModules((prev) =>
+        prev ? prev.map((m) => (m.id === selectedModuleId ? { ...m, hasQuestionsFile: true, hasQuestions: true } : m)) : prev
+      );
     } catch {
       setSaveResult({ ok: false, message: "Erro de conexão ao salvar." });
     } finally {
@@ -405,73 +463,116 @@ export function PerguntasEditorPanel() {
             <input
               value={moduleFilter}
               onChange={(e) => setModuleFilter(e.target.value)}
-              placeholder="Buscar por fase, trilha ou nome do módulo..."
+              placeholder="Buscar por Programa, fase, trilha ou nome do módulo..."
               style={{ ...inputStyle, marginBottom: 10, maxWidth: 480 }}
             />
-            <div
-              style={{
-                maxHeight: 320,
-                overflowY: "auto",
-                border: `1px solid ${theme.color.border}`,
-                borderRadius: theme.radius.md,
-              }}
-            >
-              {moduleGroups.length === 0 ? (
-                <p style={{ padding: 12, fontSize: 13, color: theme.color.textMuted, margin: 0 }}>
-                  {modules && modules.length === 0
-                    ? "Nenhum módulo com perguntas.json encontrado."
-                    : "Nenhum módulo encontrado para essa busca."}
-                </p>
-              ) : (
-                moduleGroups.map((group) => (
-                  <div key={group.label}>
+            {programGroups.length === 0 ? (
+              <p style={{ padding: 12, fontSize: 13, color: theme.color.textMuted, margin: 0 }}>
+                {modules && modules.length === 0
+                  ? "Nenhum módulo cadastrado."
+                  : "Nenhum módulo encontrado para essa busca."}
+              </p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {programGroups.map((group) => {
+                  const expanded = isSearching || expandedPrograms.has(group.programId);
+                  return (
                     <div
-                      style={{
-                        background: theme.color.infoBg,
-                        color: theme.color.infoText,
-                        fontSize: 11.5,
-                        fontWeight: 700,
-                        textTransform: "uppercase",
-                        letterSpacing: 0.3,
-                        padding: "6px 10px",
-                      }}
+                      key={group.programId}
+                      style={{ border: `1px solid ${theme.color.border}`, borderRadius: theme.radius.md, overflow: "hidden" }}
                     >
-                      {group.label}
-                    </div>
-                    {group.items.map((m) => (
                       <button
-                        key={m.id}
                         type="button"
-                        onClick={() => handleLoad(m.id)}
-                        disabled={loading}
+                        onClick={() => toggleProgram(group.programId)}
                         style={{
                           display: "flex",
-                          justifyContent: "space-between",
                           alignItems: "center",
-                          gap: 8,
+                          justifyContent: "space-between",
                           width: "100%",
-                          textAlign: "left",
-                          padding: "8px 10px",
-                          fontSize: 13,
-                          fontFamily: "inherit",
+                          background: theme.color.infoBg,
                           border: "none",
-                          borderTop: `1px solid ${theme.color.border}`,
-                          background: m.id === selectedModuleId ? theme.color.primaryLight : "transparent",
-                          color: theme.color.text,
-                          cursor: loading ? "default" : "pointer",
+                          padding: "8px 10px",
+                          cursor: "pointer",
+                          textAlign: "left",
                         }}
                       >
-                        <span>{m.nome}</span>
-                        <span style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                          {!m.hasQuestions && <Badge tone="warning">inválido</Badge>}
-                          {!m.active && <Badge tone="neutral">inativo</Badge>}
+                        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span
+                            style={{
+                              display: "inline-block",
+                              transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+                              transition: "transform 0.15s",
+                              color: theme.color.textFaint,
+                              fontSize: 11,
+                            }}
+                          >
+                            ▶
+                          </span>
+                          <b style={{ fontSize: 13, color: theme.color.infoText }}>{group.programNome}</b>
                         </span>
+                        <Badge tone="neutral">
+                          {group.count} módulo{group.count === 1 ? "" : "s"}
+                        </Badge>
                       </button>
-                    ))}
-                  </div>
-                ))
-              )}
-            </div>
+
+                      {expanded && (
+                        <div style={{ maxHeight: 320, overflowY: "auto" }}>
+                          {group.faseGroups.map((fase) => (
+                            <div key={fase.label}>
+                              <div
+                                style={{
+                                  background: theme.color.bg,
+                                  color: theme.color.textMuted,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  textTransform: "uppercase",
+                                  letterSpacing: 0.3,
+                                  padding: "5px 10px",
+                                  borderTop: `1px solid ${theme.color.border}`,
+                                }}
+                              >
+                                {fase.label}
+                              </div>
+                              {fase.items.map((m) => (
+                                <button
+                                  key={m.id}
+                                  type="button"
+                                  onClick={() => handleLoad(m.id, m.programId)}
+                                  disabled={loading}
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    gap: 8,
+                                    width: "100%",
+                                    textAlign: "left",
+                                    padding: "8px 10px",
+                                    fontSize: 13,
+                                    fontFamily: "inherit",
+                                    border: "none",
+                                    borderTop: `1px solid ${theme.color.border}`,
+                                    background: m.id === selectedModuleId ? theme.color.primaryLight : "transparent",
+                                    color: theme.color.text,
+                                    cursor: loading ? "default" : "pointer",
+                                  }}
+                                >
+                                  <span>{m.nome}</span>
+                                  <span style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                                    {!m.hasQuestionsFile && <Badge tone="neutral">sem arquivo</Badge>}
+                                    {m.hasQuestionsFile && !m.hasQuestions && <Badge tone="warning">inválido</Badge>}
+                                    {!m.active && <Badge tone="neutral">inativo</Badge>}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -509,7 +610,8 @@ export function PerguntasEditorPanel() {
                 <b style={{ fontSize: theme.font.size.base, color: theme.color.text }}>
                   {moduleNome ?? "Módulo"} · {perguntas.length} pergunta{perguntas.length === 1 ? "" : "s"}
                 </b>
-                <div style={{ marginTop: 6 }}>
+                <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {isNewFile && <Badge tone="neutral">Novo — sem perguntas.json no Drive ainda</Badge>}
                   {validating ? (
                     <Badge tone="neutral">Validando...</Badge>
                   ) : validation?.ok ? (
@@ -526,7 +628,7 @@ export function PerguntasEditorPanel() {
                   Baixar backup (.json)
                 </Button>
                 <Button onClick={() => setConfirmingSave(true)} disabled={!canPublish || saving || confirmingSave}>
-                  {saving ? "Salvando..." : "Salvar no Drive"}
+                  {saving ? "Salvando..." : isNewFile ? "Criar no Drive" : "Salvar no Drive"}
                 </Button>
               </div>
             </div>
@@ -546,8 +648,9 @@ export function PerguntasEditorPanel() {
                 }}
               >
                 <span style={{ fontSize: 13, color: theme.color.text }}>
-                  Isso sobrescreve o perguntas.json atual deste módulo direto no Drive — vale imediatamente para
-                  quem responder o quiz. Confirmar?
+                  {isNewFile
+                    ? "Isso cria o perguntas.json deste módulo direto na pasta dele no Drive — vale imediatamente para quem responder o quiz. Confirmar?"
+                    : "Isso sobrescreve o perguntas.json atual deste módulo direto no Drive — vale imediatamente para quem responder o quiz. Confirmar?"}
                 </span>
                 <div style={{ display: "flex", gap: 8 }}>
                   <Button onClick={handleConfirmSave} disabled={saving}>

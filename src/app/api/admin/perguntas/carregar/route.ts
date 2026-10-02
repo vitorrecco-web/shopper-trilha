@@ -15,6 +15,11 @@ import { validatePerguntasJson } from "@/lib/drive/validatePerguntas";
  * Se o arquivo estiver malformado/inválido, ainda assim devolve ok:true
  * com a validação indicando o erro — o editor abre vazio em vez de
  * quebrar, para o admin poder recomeçar a partir daqui.
+ *
+ * Se o módulo ainda não tem nenhum perguntas.json mapeado no Drive (ex:
+ * trilha nova), devolve `isNew: true` com uma lista vazia em vez de 404 —
+ * o editor abre pronto para o admin criar as perguntas do zero; o arquivo
+ * só nasce no Drive quando ele salvar (ver /api/admin/perguntas/salvar).
  */
 export async function GET(request: NextRequest) {
   const guard = await requireAdminOrRespond();
@@ -37,10 +42,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Módulo não encontrado." }, { status: 404 });
   }
   if (!module_.questions_drive_id) {
-    return NextResponse.json(
-      { ok: false, error: "Este módulo não possui perguntas.json mapeado no Drive." },
-      { status: 404 }
-    );
+    return NextResponse.json({
+      ok: true,
+      moduleNome: module_.nome,
+      perguntasJson: { perguntas: [] },
+      validation: { ok: true },
+      isNew: true,
+    });
   }
 
   try {

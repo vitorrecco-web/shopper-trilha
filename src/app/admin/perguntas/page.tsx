@@ -18,9 +18,10 @@ export default async function PerguntasAdminPage() {
         <Breadcrumb items={[{ label: "Painel do Gestor", href: "/admin" }, { label: "Editor de Perguntas" }]} />
         <h1 style={{ fontSize: theme.font.size.xxl, marginTop: 0, marginBottom: 4 }}>Editor de Perguntas</h1>
         <p style={{ color: theme.color.textMuted, fontSize: theme.font.size.sm, marginBottom: theme.space(5) }}>
-          Edite e valide o <code>perguntas.json</code> de um módulo sem precisar manipular JSON manualmente.
-          "Salvar no Drive" sobrescreve o arquivo do módulo direto na pasta correspondente — vale imediatamente
-          para o próximo quiz respondido. O botão de backup baixa uma cópia local antes de salvar.
+          Edite e valide o <code>perguntas.json</code> de um módulo sem precisar manipular JSON manualmente —
+          funciona até para módulos que ainda não têm nenhum arquivo no Drive. "Salvar no Drive" cria ou
+          sobrescreve o arquivo direto na pasta correspondente — vale imediatamente para o próximo quiz
+          respondido. O botão de backup baixa uma cópia local antes de salvar.
         </p>
         <PerguntasEditorPanel />
       </Container>

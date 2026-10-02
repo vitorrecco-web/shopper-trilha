@@ -120,3 +120,17 @@ export async function setModuleHasQuestions(id: string, hasQuestions: boolean): 
   const { error } = await supabase.from("modules").update({ has_questions: hasQuestions }).eq("id", id);
   if (error) throw error;
 }
+
+/**
+ * Usado pelo editor visual de perguntas (Admin) na PRIMEIRA vez que um
+ * módulo sem perguntas.json mapeado ganha um — grava o fileId recém-criado
+ * no Drive junto com `has_questions`, numa só escrita.
+ */
+export async function setModuleQuestionsDriveId(id: string, questionsDriveId: string, hasQuestions: boolean): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase
+    .from("modules")
+    .update({ questions_drive_id: questionsDriveId, has_questions: hasQuestions })
+    .eq("id", id);
+  if (error) throw error;
+}
