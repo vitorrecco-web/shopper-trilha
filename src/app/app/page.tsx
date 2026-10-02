@@ -42,7 +42,7 @@ export default async function AppHomePage() {
 
   return (
     <PageShell>
-      <Header homeHref="/app" trocarTrilhaHref={active.hasMultiple ? "/app/trilhas" : undefined} />
+      <Header homeHref="/app" trocarTrilhaHref={active.hasMultiple ? "/api/app/trocar-trilha" : undefined} />
       <Container maxWidth={560}>
         <TrilhaAccordion trilha={trilha} nome={user.nome_completo} />
       </Container>
