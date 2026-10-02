@@ -74,6 +74,7 @@ export function ModulePicker<T extends PickerModule>({
 }) {
   const [filter, setFilter] = useState("");
   const [expandedPrograms, setExpandedPrograms] = useState<Set<string>>(new Set());
+  const [expandedFases, setExpandedFases] = useState<Set<string>>(new Set());
 
   const programGroups = useMemo<ProgramGroup<T>[]>(() => {
     const term = normalizeSearch(filter.trim());
@@ -124,9 +125,19 @@ export function ModulePicker<T extends PickerModule>({
     });
   }
 
+  function toggleFase(key: string) {
+    setExpandedFases((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
   function handleSelect(m: T) {
     if (m.programId) {
       setExpandedPrograms((prev) => new Set(prev).add(m.programId!));
+      setExpandedFases((prev) => new Set(prev).add(`${m.programId}|${faseLabelFor(m)}`));
     }
     onSelect(m);
   }
@@ -187,52 +198,81 @@ export function ModulePicker<T extends PickerModule>({
                 </button>
 
                 {expanded && (
-                  <div style={{ maxHeight: 320, overflowY: "auto" }}>
-                    {group.faseGroups.map((fase) => (
-                      <div key={fase.label}>
-                        <div
-                          style={{
-                            background: theme.color.bg,
-                            color: theme.color.textMuted,
-                            fontSize: 11,
-                            fontWeight: 700,
-                            textTransform: "uppercase",
-                            letterSpacing: 0.3,
-                            padding: "5px 10px",
-                            borderTop: `1px solid ${theme.color.border}`,
-                          }}
-                        >
-                          {fase.label}
-                        </div>
-                        {fase.items.map((m) => (
+                  <div>
+                    {group.faseGroups.map((fase) => {
+                      const faseKey = `${group.programId}|${fase.label}`;
+                      const faseOpen = isSearching || expandedFases.has(faseKey);
+                      return (
+                        <div key={fase.label}>
                           <button
-                            key={m.id}
                             type="button"
-                            onClick={() => handleSelect(m)}
-                            disabled={disabled}
+                            onClick={() => toggleFase(faseKey)}
                             style={{
                               display: "flex",
-                              justifyContent: "space-between",
                               alignItems: "center",
-                              gap: 8,
+                              justifyContent: "space-between",
                               width: "100%",
-                              textAlign: "left",
-                              padding: "8px 10px",
-                              fontSize: 13,
-                              fontFamily: "inherit",
+                              background: theme.color.bg,
+                              color: theme.color.textMuted,
                               border: "none",
                               borderTop: `1px solid ${theme.color.border}`,
-                              background: m.id === selectedId ? theme.color.primaryLight : "transparent",
-                              color: theme.color.text,
-                              cursor: disabled ? "default" : "pointer",
+                              padding: "7px 10px",
+                              cursor: "pointer",
+                              textAlign: "left",
+                              fontFamily: "inherit",
                             }}
                           >
-                            <span>{m.nome}</span>
-                            <span style={{ display: "flex", gap: 6, flexShrink: 0 }}>{renderBadges?.(m)}</span>
+                            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  transform: faseOpen ? "rotate(90deg)" : "rotate(0deg)",
+                                  transition: "transform 0.15s",
+                                  color: theme.color.textFaint,
+                                  fontSize: 10,
+                                }}
+                              >
+                                ▶
+                              </span>
+                              <span style={{ fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3 }}>
+                                {fase.label}
+                              </span>
+                            </span>
+                            <span style={{ fontSize: 11, color: theme.color.textFaint }}>
+                              {fase.items.length} módulo{fase.items.length === 1 ? "" : "s"}
+                            </span>
                           </button>
-                        ))}
-                      </div>
-                    ))}
+                          {faseOpen &&
+                            fase.items.map((m) => (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => handleSelect(m)}
+                                disabled={disabled}
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  width: "100%",
+                                  textAlign: "left",
+                                  padding: "8px 10px 8px 26px",
+                                  fontSize: 13,
+                                  fontFamily: "inherit",
+                                  border: "none",
+                                  borderTop: `1px solid ${theme.color.border}`,
+                                  background: m.id === selectedId ? theme.color.primaryLight : "transparent",
+                                  color: theme.color.text,
+                                  cursor: disabled ? "default" : "pointer",
+                                }}
+                              >
+                                <span>{m.nome}</span>
+                                <span style={{ display: "flex", gap: 6, flexShrink: 0 }}>{renderBadges?.(m)}</span>
+                              </button>
+                            ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
