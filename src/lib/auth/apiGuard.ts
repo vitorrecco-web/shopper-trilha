@@ -5,6 +5,7 @@ import { requireAdminSession, getCurrentSession } from "./getSession";
 import type { SessionData } from "./session";
 import type { User } from "@/lib/db/types";
 import { getUserById } from "@/lib/repositories/usersRepository";
+import { resolveActiveEnrollment } from "@/lib/services/activeEnrollmentService";
 
 /**
  * Para usar em Route Handlers: se não autenticado ou não-admin, já
@@ -40,14 +41,16 @@ export async function requireAdminOrRespond(): Promise<
  * anotado nas Fases 8/9, resolvido na Fase 11 — tarefa 6, tratamento de
  * erros). Nunca vaza detalhe de infraestrutura ao cliente.
  *
- * `program_id` precisa existir aqui — essas rotas são só de aluno (quiz,
- * PDF, progresso de vídeo), e um aluno sempre tem Programa atribuído na
- * criação (§ cadastro em /admin/usuarios/novo). `program_id` nulo só
- * acontece para admin (mesmo padrão de `track_id`) — um admin batendo
- * numa rota de aluno é tratado como acesso inválido, não como bug.
+ * Resolve a matrícula ativa (`resolveActiveEnrollment`) e já devolve
+ * `programId`/`trackId` prontos — essas rotas são só de aluno (quiz, PDF,
+ * progresso de vídeo). Um aluno com 2+ trilhas e NENHUMA escolhida ainda
+ * na sessão (`reason: "choose_program"`) não deveria bater aqui numa
+ * navegação normal (a página sempre manda pra /app/trilhas antes) — só
+ * acontece com uma aba antiga aberta; a API recusa com um motivo
+ * reconhecível em vez de adivinhar qual trilha usar.
  */
 export async function requireActiveUserOrRespond(): Promise<
-  { user: User & { program_id: string } } | { response: NextResponse }
+  { user: User; programId: string; trackId: string | null } | { response: NextResponse }
 > {
   const session = await getCurrentSession();
   if (!session) {
@@ -59,10 +62,26 @@ export async function requireActiveUserOrRespond(): Promise<
     if (!user || user.status === "inactive") {
       return { response: NextResponse.json({ ok: false, error: "Usuário inválido." }, { status: 401 }) };
     }
-    if (!user.program_id) {
-      return { response: NextResponse.json({ ok: false, error: "Usuário sem Programa atribuído." }, { status: 403 }) };
+
+    const active = await resolveActiveEnrollment(user.id, session.activeProgramId);
+    if (active.status === "none") {
+      return {
+        response: NextResponse.json(
+          { ok: false, error: "Usuário sem nenhuma trilha atribuída.", reason: "no_enrollment" },
+          { status: 403 }
+        ),
+      };
     }
-    return { user: { ...user, program_id: user.program_id } };
+    if (active.status === "choose") {
+      return {
+        response: NextResponse.json(
+          { ok: false, error: "Escolha uma trilha antes de continuar.", reason: "choose_program" },
+          { status: 409 }
+        ),
+      };
+    }
+
+    return { user, programId: active.enrollment.programId, trackId: active.enrollment.trackId };
   } catch (err) {
     console.error("Erro ao carregar usuário da sessão:", err);
     return {

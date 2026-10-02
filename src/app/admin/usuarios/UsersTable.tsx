@@ -13,13 +13,14 @@ export interface UserRow {
   nome_completo: string;
   matricula: string | null;
   login: string;
-  program_nome: string;
-  track_id: string | null;
-  track_nome: string;
+  /** Pode ter mais de uma trilha (Programa) ativa ao mesmo tempo. */
+  program_ids: string[];
+  programas_nomes: string[];
   cd: string | null;
   turno: string | null;
   status: "active" | "inactive";
   last_login_at: string | null;
+  /** Combinado de todas as trilhas da pessoa — ver `computeUsersProgressBatch`. */
   progress: UserProgress;
   trackStatus: TrackStatus;
 }
@@ -48,10 +49,16 @@ const trackStatusTone: Record<TrackStatus, "neutral" | "warning" | "primary"> = 
  * "Status da trilha" (Fase 10, tarefa 5) é calculado — nunca lido de
  * uma flag salva (§12).
  */
-export function UsersTable({ initialUsers, tracks }: { initialUsers: UserRow[]; tracks: { id: string; nome: string }[] }) {
+export function UsersTable({
+  initialUsers,
+  programs,
+}: {
+  initialUsers: UserRow[];
+  programs: { id: string; nome: string }[];
+}) {
   const [users, setUsers] = useState(initialUsers);
   const [search, setSearch] = useState("");
-  const [trackFilter, setTrackFilter] = useState("");
+  const [programFilter, setProgramFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +66,7 @@ export function UsersTable({ initialUsers, tracks }: { initialUsers: UserRow[]; 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return users.filter((u) => {
-      if (trackFilter && u.track_id !== trackFilter) return false;
+      if (programFilter && !u.program_ids.includes(programFilter)) return false;
       if (statusFilter && u.status !== statusFilter) return false;
       if (!q) return true;
       return (
@@ -68,7 +75,7 @@ export function UsersTable({ initialUsers, tracks }: { initialUsers: UserRow[]; 
         (u.matricula ?? "").toLowerCase().includes(q)
       );
     });
-  }, [users, search, trackFilter, statusFilter]);
+  }, [users, search, programFilter, statusFilter]);
 
   async function toggleStatus(user: UserRow) {
     const nextStatus = user.status === "active" ? "inactive" : "active";
@@ -111,11 +118,11 @@ export function UsersTable({ initialUsers, tracks }: { initialUsers: UserRow[]; 
           onChange={(e) => setSearch(e.target.value)}
           style={{ ...fieldStyle, width: "100%", maxWidth: 320 }}
         />
-        <select value={trackFilter} onChange={(e) => setTrackFilter(e.target.value)} style={fieldStyle}>
-          <option value="">Todas as trilhas</option>
-          {tracks.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.nome}
+        <select value={programFilter} onChange={(e) => setProgramFilter(e.target.value)} style={fieldStyle}>
+          <option value="">Todos os Programas</option>
+          {programs.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.nome}
             </option>
           ))}
         </select>
@@ -157,8 +164,7 @@ export function UsersTable({ initialUsers, tracks }: { initialUsers: UserRow[]; 
               {[
                 "Nome",
                 "Matrícula",
-                "Programa",
-                "Trilha",
+                "Programas",
                 "CD",
                 "Turno",
                 "Progresso",
@@ -185,8 +191,19 @@ export function UsersTable({ initialUsers, tracks }: { initialUsers: UserRow[]; 
                   </Link>
                 </td>
                 <td style={{ padding: "12px 14px", color: theme.color.textMuted }}>{u.matricula ?? "—"}</td>
-                <td style={{ padding: "12px 14px" }}>{u.program_nome}</td>
-                <td style={{ padding: "12px 14px" }}>{u.track_nome}</td>
+                <td style={{ padding: "12px 14px" }}>
+                  {u.programas_nomes.length > 0 ? (
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                      {u.programas_nomes.map((nome) => (
+                        <Badge key={nome} tone="neutral">
+                          {nome}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    "—"
+                  )}
+                </td>
                 <td style={{ padding: "12px 14px", color: theme.color.textMuted }}>{u.cd ?? "—"}</td>
                 <td style={{ padding: "12px 14px", color: theme.color.textMuted }}>{u.turno ?? "—"}</td>
                 <td style={{ padding: "12px 14px" }}>{formatProgress(u.progress)}</td>
@@ -222,7 +239,7 @@ export function UsersTable({ initialUsers, tracks }: { initialUsers: UserRow[]; 
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={11} style={{ padding: 20, textAlign: "center", color: theme.color.textFaint }}>
+                <td colSpan={10} style={{ padding: 20, textAlign: "center", color: theme.color.textFaint }}>
                   Nenhum usuário encontrado.
                 </td>
               </tr>

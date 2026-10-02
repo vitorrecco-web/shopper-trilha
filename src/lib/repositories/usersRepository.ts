@@ -6,8 +6,12 @@ import type { User } from "@/lib/db/types";
  * Regras vindas de PROJECT_CONTEXT.md §11:
  * - login é único, case-insensitive (garantido pelo índice `users_login_unique` na migration).
  * - matrícula pode repetir.
- * - trilha/função não pode ser editada após criação (não expor update de track_id aqui).
  * - senha nunca em texto puro — quem chama este repositório já deve passar o hash pronto.
+ *
+ * Trilha(s)/função(ões) de um usuário NÃO vivem mais aqui — um login pode
+ * ter várias matrículas ativas ao mesmo tempo, então isso é
+ * `enrollmentsRepository.ts` (tabela `enrollments`), nunca uma coluna
+ * única em `users`.
  */
 
 export async function getUserByLogin(login: string): Promise<User | null> {
@@ -30,43 +34,19 @@ export async function getUserById(id: string): Promise<User | null> {
   return data as User | null;
 }
 
-export interface UserWithTrack extends User {
-  track: { id: string; nome: string } | null;
-  program: { id: string; nome: string } | null;
-}
-
-/** Usado pela tabela do painel admin (§13) — já traz o nome da trilha/Programa via join. */
-export async function listUsersWithTrack(): Promise<UserWithTrack[]> {
+/** Usado pela tabela do painel admin (§13). */
+export async function listUsersWithTrack(): Promise<User[]> {
   const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from("users")
-    .select("*, track:tracks(id, nome), program:programs(id, nome)")
-    .order("nome_completo", { ascending: true });
+  const { data, error } = await supabase.from("users").select("*").order("nome_completo", { ascending: true });
 
   if (error) throw error;
-  return data as unknown as UserWithTrack[];
+  return data as User[];
 }
 
-export async function getUserWithTrackById(id: string): Promise<UserWithTrack | null> {
-  const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from("users")
-    .select("*, track:tracks(id, nome), program:programs(id, nome)")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data as unknown as UserWithTrack | null;
-}
-
-export async function listUsers(filters?: {
-  trackId?: string;
-  status?: User["status"];
-}): Promise<User[]> {
+export async function listUsers(filters?: { status?: User["status"] }): Promise<User[]> {
   const supabase = getSupabaseServerClient();
   let query = supabase.from("users").select("*").order("nome_completo", { ascending: true });
 
-  if (filters?.trackId) query = query.eq("track_id", filters.trackId);
   if (filters?.status) query = query.eq("status", filters.status);
 
   const { data, error } = await query;
@@ -79,9 +59,6 @@ export interface CreateUserInput {
   matricula?: string | null;
   login: string;
   password_hash: string;
-  program_id: string;
-  /** Opcional — só obrigatório quando o Programa tiver uma fase "por função" (ex: Fase 1 hoje na Trilha de Liderança). */
-  track_id?: string | null;
   cd?: string | null;
   turno?: string | null;
   role?: User["role"];
@@ -97,8 +74,6 @@ export async function createUser(input: CreateUserInput): Promise<User> {
       matricula: input.matricula ?? null,
       login: input.login,
       password_hash: input.password_hash,
-      program_id: input.program_id,
-      track_id: input.track_id ?? null,
       cd: input.cd ?? null,
       turno: input.turno ?? null,
       role: input.role ?? "student",
@@ -112,8 +87,10 @@ export async function createUser(input: CreateUserInput): Promise<User> {
 }
 
 /**
- * Campos editáveis segundo §11.4. `track_id` propositalmente de fora —
- * trilha/função não pode ser alterada após criação.
+ * Campos editáveis segundo §11.4. Matrícula(s)/função(ões) propositalmente
+ * de fora — uma matrícula existente não pode ser alterada após criada
+ * (ver `enrollmentsRepository.ts`: adicionar uma trilha nova é uma
+ * operação diferente de editar uma já existente).
  */
 export interface UpdateUserInput {
   nome_completo?: string;

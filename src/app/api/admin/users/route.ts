@@ -4,8 +4,12 @@ import { z } from "zod";
 import { requireAdminOrRespond } from "@/lib/auth/apiGuard";
 import { listUsersWithTrack, createUser } from "@/lib/repositories/usersRepository";
 import { listActiveTracksForProgram } from "@/lib/repositories/tracksRepository";
+import {
+  listActiveEnrollmentsForUsers,
+  createOrReactivateEnrollment,
+} from "@/lib/repositories/enrollmentsRepository";
 import { hashPassword } from "@/lib/auth/password";
-import { computeUserProgress } from "@/lib/services/userProgress";
+import { computeUsersProgressBatch } from "@/lib/services/userProgress";
 import { isUniqueViolation } from "@/lib/utils/dbErrors";
 
 export async function GET() {
@@ -13,24 +17,37 @@ export async function GET() {
   if ("response" in guard) return guard.response;
 
   const users = await listUsersWithTrack();
-
-  const usersWithProgress = await Promise.all(
-    users.map(async ({ password_hash, ...user }) => ({
-      ...user,
-      progress: await computeUserProgress(user.id, user.program_id, user.track_id),
+  const enrollmentsByUserId = await listActiveEnrollmentsForUsers(users.map((u) => u.id));
+  const progressByUserId = await computeUsersProgressBatch(
+    users.map((u) => ({
+      id: u.id,
+      enrollments: (enrollmentsByUserId.get(u.id) ?? []).map((e) => ({
+        program_id: e.program_id,
+        track_id: e.track_id,
+      })),
     }))
   );
 
+  const usersWithProgress = users.map(({ password_hash, ...user }) => ({
+    ...user,
+    enrollments: enrollmentsByUserId.get(user.id) ?? [],
+    progress: progressByUserId.get(user.id) ?? { totalModules: 0, completedModules: 0, percent: null },
+  }));
+
   return NextResponse.json({ ok: true, users: usersWithProgress });
 }
+
+const enrollmentInputSchema = z.object({
+  program_id: z.string().uuid("Selecione um Programa."),
+  track_id: z.string().uuid().optional().nullable(),
+});
 
 const createUserSchema = z.object({
   nome_completo: z.string().trim().min(1, "Informe o nome completo."),
   matricula: z.string().trim().min(1).optional().nullable(),
   login: z.string().trim().min(1, "Informe o login."),
   password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
-  program_id: z.string().uuid("Selecione um Programa."),
-  track_id: z.string().uuid().optional().nullable(),
+  enrollments: z.array(enrollmentInputSchema).min(1, "Adicione pelo menos uma trilha."),
   cd: z.string().trim().min(1).optional().nullable(),
   turno: z.string().trim().min(1).optional().nullable(),
   status: z.enum(["active", "inactive"]).optional(),
@@ -50,15 +67,22 @@ export async function POST(request: Request) {
     );
   }
 
-  const { password, track_id, ...rest } = parsed.data;
+  const { password, enrollments, ...rest } = parsed.data;
 
-  // Defesa em profundidade: `track_id` precisa pertencer ao Programa
-  // escolhido — nunca confiar que o front só ofereceu opções válidas.
-  if (track_id) {
-    const tracksOfProgram = await listActiveTracksForProgram(rest.program_id);
-    if (!tracksOfProgram.some((t) => t.id === track_id)) {
+  // Um Programa não pode se repetir na mesma lista (UNIQUE(user_id, program_id) rejeitaria na 2ª linha mesmo assim).
+  const programIds = enrollments.map((e) => e.program_id);
+  if (new Set(programIds).size !== programIds.length) {
+    return NextResponse.json({ ok: false, error: "Cada Programa só pode aparecer uma vez na lista de trilhas." }, { status: 400 });
+  }
+
+  // Defesa em profundidade: cada `track_id` precisa pertencer ao Programa
+  // daquela mesma linha — nunca confiar que o front só ofereceu opções válidas.
+  for (const e of enrollments) {
+    if (!e.track_id) continue;
+    const tracksOfProgram = await listActiveTracksForProgram(e.program_id);
+    if (!tracksOfProgram.some((t) => t.id === e.track_id)) {
       return NextResponse.json(
-        { ok: false, error: "A Função selecionada não pertence ao Programa escolhido." },
+        { ok: false, error: "A Função selecionada não pertence ao Programa escolhido em uma das trilhas." },
         { status: 400 }
       );
     }
@@ -66,7 +90,12 @@ export async function POST(request: Request) {
 
   try {
     const password_hash = await hashPassword(password);
-    const { password_hash: _omit, ...user } = await createUser({ ...rest, track_id, password_hash });
+    const { password_hash: _omit, ...user } = await createUser({ ...rest, password_hash });
+
+    for (const e of enrollments) {
+      await createOrReactivateEnrollment({ user_id: user.id, program_id: e.program_id, track_id: e.track_id ?? null });
+    }
+
     return NextResponse.json({ ok: true, user }, { status: 201 });
   } catch (err) {
     if (isUniqueViolation(err)) {

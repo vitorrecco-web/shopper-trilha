@@ -15,9 +15,9 @@ import { fetchDriveFileAsBuffer } from "@/lib/drive/googleDriveClient";
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireActiveUserOrRespond();
   if ("response" in auth) return auth.response;
-  const { user } = auth;
+  const { user, programId, trackId } = auth;
 
-  const access = await getModuleAccessInfo(user.id, user.program_id, user.track_id, params.id);
+  const access = await getModuleAccessInfo(user.id, programId, trackId, params.id);
 
   // Mesma resposta para "não existe/não aplicável" e "existe mas está
   // bloqueado" — não revela qual dos dois casos é.
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   // o módulo e libera o próximo.
   if (!wasAlreadyAccessed && !access.module.has_questions) {
     await markCompletedWithoutQuiz(user.id, access.module.id);
-    await unlockNextModule(user.id, user.program_id, user.track_id, access.module.id);
+    await unlockNextModule(user.id, programId, trackId, access.module.id);
   }
 
   const download = request.nextUrl.searchParams.get("download") === "1";

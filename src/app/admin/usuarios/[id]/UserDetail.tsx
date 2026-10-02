@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { UserProgress } from "@/lib/services/userProgress";
 import { computeTrackStatus, trackStatusLabel } from "@/lib/services/trackStatus";
@@ -13,13 +13,18 @@ interface UserInfo {
   nome_completo: string;
   matricula: string | null;
   login: string;
-  program_nome: string;
-  track_nome: string;
   cd: string | null;
   turno: string | null;
   status: "active" | "inactive";
   created_at: string;
   last_login_at: string | null;
+}
+
+interface EnrollmentInfo {
+  id: string;
+  program_id: string;
+  program_nome: string;
+  track_nome: string | null;
 }
 
 interface ModuleDetail {
@@ -29,6 +34,7 @@ interface ModuleDetail {
   phase_id: string;
   phase_nome: string;
   phase_ordem: number;
+  program_nome: string;
   has_questions: boolean;
   unlocked_at: string | null;
   material_accessed: boolean;
@@ -61,13 +67,25 @@ function formatDate(iso: string | null): string {
  * reordena nada de novo.
  */
 function groupModulesByPhase(modules: ModuleDetail[]) {
-  const groups: { phase_id: string; phase_nome: string; phase_ordem: number; modules: ModuleDetail[] }[] = [];
+  const groups: {
+    phase_id: string;
+    phase_nome: string;
+    phase_ordem: number;
+    program_nome: string;
+    modules: ModuleDetail[];
+  }[] = [];
   for (const m of modules) {
     const last = groups[groups.length - 1];
     if (last && last.phase_id === m.phase_id) {
       last.modules.push(m);
     } else {
-      groups.push({ phase_id: m.phase_id, phase_nome: m.phase_nome, phase_ordem: m.phase_ordem, modules: [m] });
+      groups.push({
+        phase_id: m.phase_id,
+        phase_nome: m.phase_nome,
+        phase_ordem: m.phase_ordem,
+        program_nome: m.program_nome,
+        modules: [m],
+      });
     }
   }
   return groups;
@@ -175,18 +193,173 @@ function ModuleRow({ m, attempts }: { m: ModuleDetail; attempts: AttemptDetail[]
   );
 }
 
+interface TrackOption {
+  id: string;
+  nome: string;
+}
+
+/** Form de "+ Adicionar trilha" — mesmo padrão Programa→Função do cadastro, só que para um usuário já existente. */
+function AddEnrollmentForm({
+  userId,
+  allPrograms,
+  excludeProgramIds,
+  onAdded,
+  onCancel,
+}: {
+  userId: string;
+  allPrograms: { id: string; nome: string }[];
+  excludeProgramIds: string[];
+  onAdded: () => void;
+  onCancel: () => void;
+}) {
+  const availablePrograms = allPrograms.filter((p) => !excludeProgramIds.includes(p.id));
+  const [programId, setProgramId] = useState(availablePrograms[0]?.id ?? "");
+  const [trackId, setTrackId] = useState("");
+  const [tracks, setTracks] = useState<TrackOption[] | null>(null);
+  const [loadingTracks, setLoadingTracks] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!programId) {
+      setTracks([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingTracks(true);
+    fetch(`/api/admin/tracks?programId=${encodeURIComponent(programId)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        setTracks(data.ok ? (data.tracks as TrackOption[]) : []);
+      })
+      .catch(() => {
+        if (!cancelled) setTracks([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingTracks(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [programId]);
+
+  async function handleAdd() {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/enrollments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ program_id: programId, track_id: trackId || null }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setError(data.error ?? "Não foi possível adicionar a trilha.");
+        return;
+      }
+      onAdded();
+    } catch {
+      setError("Erro de conexão. Tente novamente.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (availablePrograms.length === 0) {
+    return (
+      <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: 0 }}>
+        Este colaborador já está matriculado em todos os Programas ativos.
+      </p>
+    );
+  }
+
+  return (
+    <div style={{ border: `1px dashed ${theme.color.border}`, borderRadius: theme.radius.md, padding: theme.space(3) }}>
+      <label style={{ ...labelStyle, marginBottom: 8 }}>
+        Programa
+        <select style={inputStyle} value={programId} onChange={(e) => { setProgramId(e.target.value); setTrackId(""); }}>
+          {availablePrograms.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.nome}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {loadingTracks && (
+        <p style={{ fontSize: theme.font.size.xs, color: theme.color.textMuted, marginBottom: 8 }}>Carregando funções...</p>
+      )}
+      {!loadingTracks && tracks && tracks.length > 0 && (
+        <label style={{ ...labelStyle, marginBottom: 8 }}>
+          Função
+          <select style={inputStyle} value={trackId} onChange={(e) => setTrackId(e.target.value)}>
+            <option value="">Selecione...</option>
+            {tracks.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.nome}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {error && (
+        <p role="alert" style={{ color: theme.color.danger, fontSize: theme.font.size.xs, marginBottom: 8 }}>
+          {error}
+        </p>
+      )}
+
+      <div style={{ display: "flex", gap: 8 }}>
+        <Button type="button" onClick={handleAdd} disabled={saving || !programId}>
+          {saving ? "Adicionando..." : "Adicionar"}
+        </Button>
+        <Button type="button" variant="secondary" onClick={onCancel} disabled={saving}>
+          Cancelar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function UserDetail({
   user,
+  enrollments,
+  allPrograms,
   progress,
   modules,
   attempts,
 }: {
   user: UserInfo;
+  enrollments: EnrollmentInfo[];
+  allPrograms: { id: string; nome: string }[];
   progress: UserProgress;
   modules: ModuleDetail[];
   attempts: AttemptDetail[];
 }) {
   const router = useRouter();
+
+  const [showAddTrilha, setShowAddTrilha] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+
+  async function handleRemoveEnrollment(enrollmentId: string) {
+    setRemovingId(enrollmentId);
+    setRemoveError(null);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/enrollments/${enrollmentId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setRemoveError(data.error ?? "Não foi possível remover a trilha.");
+        return;
+      }
+      router.refresh();
+    } catch {
+      setRemoveError("Erro de conexão. Tente novamente.");
+    } finally {
+      setRemovingId(null);
+    }
+  }
 
   const [form, setForm] = useState({
     nome_completo: user.nome_completo,
@@ -271,11 +444,78 @@ export function UserDetail({
         {user.nome_completo}
       </h1>
       <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, marginBottom: theme.space(5) }}>
-        Programa: <b style={{ color: theme.color.text }}>{user.program_nome}</b> · Função:{" "}
-        <b style={{ color: theme.color.text }}>{user.track_nome}</b> (não editável) · Matrícula:{" "}
-        {user.matricula ?? "—"} · Início: {formatDate(user.created_at)} · Último acesso:{" "}
+        Matrícula: {user.matricula ?? "—"} · Início: {formatDate(user.created_at)} · Último acesso:{" "}
         {formatDate(user.last_login_at)}
       </p>
+
+      {/* Trilhas (matrículas) — um usuário pode ter mais de uma ao mesmo
+          tempo. Uma matrícula existente nunca é editada em si (§11.4) —
+          só adicionada (trilha nova) ou removida (soft-delete). */}
+      <section style={sectionStyle}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: theme.space(3) }}>
+          <h2 style={{ fontSize: theme.font.size.md, margin: 0, color: theme.color.text }}>Trilhas</h2>
+          {!showAddTrilha && (
+            <Button type="button" variant="secondary" onClick={() => setShowAddTrilha(true)}>
+              + Adicionar trilha
+            </Button>
+          )}
+        </div>
+
+        {removeError && (
+          <p role="alert" style={{ color: theme.color.danger, fontSize: theme.font.size.sm, marginBottom: theme.space(3) }}>
+            {removeError}
+          </p>
+        )}
+
+        {enrollments.length === 0 ? (
+          <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: 0 }}>
+            Nenhuma trilha atribuída ainda.
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: showAddTrilha ? theme.space(3) : 0 }}>
+            {enrollments.map((e) => (
+              <div
+                key={e.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 8,
+                  border: `1px solid ${theme.color.border}`,
+                  borderRadius: theme.radius.md,
+                  padding: "8px 12px",
+                }}
+              >
+                <span style={{ fontSize: theme.font.size.sm, color: theme.color.text }}>
+                  <b>{e.program_nome}</b>
+                  {e.track_nome && <span style={{ color: theme.color.textMuted }}> · {e.track_nome}</span>}
+                </span>
+                <Button
+                  type="button"
+                  variant="danger"
+                  onClick={() => handleRemoveEnrollment(e.id)}
+                  disabled={removingId === e.id}
+                >
+                  {removingId === e.id ? "Removendo..." : "Remover"}
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {showAddTrilha && (
+          <AddEnrollmentForm
+            userId={user.id}
+            allPrograms={allPrograms}
+            excludeProgramIds={enrollments.map((e) => e.program_id)}
+            onAdded={() => {
+              setShowAddTrilha(false);
+              router.refresh();
+            }}
+            onCancel={() => setShowAddTrilha(false)}
+          />
+        )}
+      </section>
 
       {/* Progresso geral */}
       <section style={sectionStyle}>
@@ -440,7 +680,7 @@ export function UserDetail({
                     marginBottom: 6,
                   }}
                 >
-                  Fase {group.phase_ordem} — {group.phase_nome}
+                  {group.program_nome} · Fase {group.phase_ordem} — {group.phase_nome}
                 </p>
                 <div style={{ display: "flex", flexDirection: "column", gap: theme.space(2) }}>
                   {group.modules.map((m) => (

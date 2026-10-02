@@ -23,9 +23,9 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireActiveUserOrRespond();
   if ("response" in auth) return auth.response;
-  const { user } = auth;
+  const { user, programId, trackId } = auth;
 
-  const access = await getModuleAccessInfo(user.id, user.program_id, user.track_id, params.id);
+  const access = await getModuleAccessInfo(user.id, programId, trackId, params.id);
   if (!access || !access.unlocked || access.module.material_type !== "youtube") {
     return NextResponse.json({ ok: false, error: "Módulo não disponível." }, { status: 404 });
   }

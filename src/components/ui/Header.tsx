@@ -14,10 +14,13 @@ export function Header({
   nome,
   context,
   homeHref,
+  trocarTrilhaHref,
 }: {
   nome?: string;
   context?: string;
   homeHref: string;
+  /** Só passado quando o aluno tem mais de uma trilha ativa — ver `resolveActiveEnrollment`. */
+  trocarTrilhaHref?: string;
 }) {
   return (
     <header
@@ -59,6 +62,20 @@ export function Header({
       </Link>
 
       <div style={{ display: "flex", alignItems: "center", gap: theme.space(3), minWidth: 0 }}>
+        {trocarTrilhaHref && (
+          <Link
+            href={trocarTrilhaHref}
+            style={{
+              fontSize: theme.font.size.xs,
+              color: theme.color.primaryDark,
+              textDecoration: "none",
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Trocar de trilha
+          </Link>
+        )}
         {nome && (
           <span
             style={{

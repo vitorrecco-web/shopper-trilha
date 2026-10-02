@@ -21,12 +21,15 @@ import { unlockNextModule } from "@/lib/services/progressionService";
  */
 async function authorize(
   moduleId: string
-): Promise<{ user: User & { program_id: string }; access: ModuleAccessInfo } | { error: NextResponse }> {
+): Promise<
+  | { user: User; programId: string; trackId: string | null; access: ModuleAccessInfo }
+  | { error: NextResponse }
+> {
   const auth = await requireActiveUserOrRespond();
   if ("response" in auth) return { error: auth.response };
-  const { user } = auth;
+  const { user, programId, trackId } = auth;
 
-  const access = await getModuleAccessInfo(user.id, user.program_id, user.track_id, moduleId);
+  const access = await getModuleAccessInfo(user.id, programId, trackId, moduleId);
   if (!access || !access.unlocked || !access.module.has_questions || !access.module.questions_drive_id) {
     return { error: NextResponse.json({ ok: false, error: "Quiz não disponível." }, { status: 404 }) };
   }
@@ -47,7 +50,7 @@ async function authorize(
     };
   }
 
-  return { user, access };
+  return { user, programId, trackId, access };
 }
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
@@ -73,7 +76,7 @@ const submitSchema = z.object({
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await authorize(params.id);
   if ("error" in auth) return auth.error;
-  const { user, access } = auth;
+  const { user, programId, trackId, access } = auth;
 
   const body = await request.json().catch(() => null);
   const parsed = submitSchema.safeParse(body);
@@ -114,7 +117,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   // só aumenta best_score e nunca desmarca completed).
   if (result.passed) {
     await markPassedAndMaybeUpdateBestScore(user.id, access.module.id, result.score);
-    await unlockNextModule(user.id, user.program_id, user.track_id, access.module.id);
+    await unlockNextModule(user.id, programId, trackId, access.module.id);
   }
 
   return NextResponse.json({

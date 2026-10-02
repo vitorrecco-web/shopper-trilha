@@ -13,6 +13,13 @@ export interface SessionData {
   userId: string;
   role: "admin" | "student";
   nome: string;
+  /**
+   * Qual Programa (trilha) o aluno escolheu usar NESTA sessão, quando ele
+   * tem mais de uma matrícula ativa — ver `activeEnrollmentService.ts`.
+   * Nunca definido no login em si; só depois da tela de escolha
+   * (`/app/trilhas`). Com 1 matrícula só, este campo nunca é necessário.
+   */
+  activeProgramId?: string;
 }
 
 function getSessionSecret(): string {

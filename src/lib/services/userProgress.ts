@@ -55,15 +55,21 @@ export async function computeUserProgress(
  * nenhuma mudança visual/de props envolvida.
  *
  * Esta versão em lote faz o equivalente com um número de consultas FIXO
- * por PROGRAMA distinto (não por usuário): uma busca de módulos por
- * Programa (Universidade Shopper tem poucos Programas, não centenas),
- * mais uma única consulta de user_modules de todos os usuários — e
- * computa o progresso de cada um em memória depois.
+ * por PROGRAMA distinto (não por usuário nem por matrícula): uma busca
+ * de módulos por Programa, mais uma única consulta de user_modules de
+ * todos os usuários — e computa o progresso de cada um em memória
+ * depois.
+ *
+ * Um usuário pode ter várias matrículas (trilhas) ativas ao mesmo tempo
+ * — o progresso devolvido aqui é a SOMA combinada de todas elas (módulos
+ * concluídos / total aplicável somando todas as trilhas da pessoa), que
+ * é a métrica única mostrada na listagem de Usuários do admin. O
+ * detalhe por trilha usa `computeUserProgress` (uma matrícula por vez).
  */
 export async function computeUsersProgressBatch(
-  users: Array<{ id: string; program_id: string | null; track_id: string | null }>
+  users: Array<{ id: string; enrollments: Array<{ program_id: string; track_id: string | null }> }>
 ): Promise<Map<string, UserProgress>> {
-  const distinctProgramIds = [...new Set(users.map((u) => u.program_id).filter((p): p is string => p !== null))];
+  const distinctProgramIds = [...new Set(users.flatMap((u) => u.enrollments.map((e) => e.program_id)))];
 
   const [modulesByProgramEntries, userModules] = await Promise.all([
     Promise.all(
@@ -84,19 +90,22 @@ export async function computeUsersProgressBatch(
 
   const result = new Map<string, UserProgress>();
   for (const u of users) {
-    const programModules = u.program_id ? (modulesByProgramId.get(u.program_id) ?? []) : [];
-    const applicable = programModules.filter((m) => m.track_id === null || m.track_id === u.track_id);
-    if (applicable.length === 0) {
-      result.set(u.id, { totalModules: 0, completedModules: 0, percent: null });
-      continue;
-    }
     const myUserModules = userModulesByUserId.get(u.id) ?? [];
     const completedIds = new Set(myUserModules.filter((m) => m.completed).map((m) => m.module_id));
-    const completedModules = applicable.filter((m) => completedIds.has(m.id)).length;
+
+    let totalModules = 0;
+    let completedModules = 0;
+    for (const e of u.enrollments) {
+      const programModules = modulesByProgramId.get(e.program_id) ?? [];
+      const applicable = programModules.filter((m) => m.track_id === null || m.track_id === e.track_id);
+      totalModules += applicable.length;
+      completedModules += applicable.filter((m) => completedIds.has(m.id)).length;
+    }
+
     result.set(u.id, {
-      totalModules: applicable.length,
+      totalModules,
       completedModules,
-      percent: Math.round((completedModules / applicable.length) * 100),
+      percent: totalModules > 0 ? Math.round((completedModules / totalModules) * 100) : null,
     });
   }
   return result;

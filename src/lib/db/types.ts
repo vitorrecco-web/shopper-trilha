@@ -45,9 +45,6 @@ export interface User {
   matricula: string | null;
   login: string;
   password_hash: string;
-  /** Nullable — admin não pertence a um Programa específico (mesmo padrão de `track_id`). */
-  program_id: string | null;
-  track_id: string | null;
   cd: string | null;
   turno: string | null;
   role: UserRole;
@@ -55,6 +52,23 @@ export interface User {
   created_at: string;
   updated_at: string;
   last_login_at: string | null;
+}
+
+/**
+ * Matrícula — vincula um usuário a UM Programa (e, quando aplicável, a uma
+ * Função dentro dele). Um usuário pode ter várias matrículas ativas ao
+ * mesmo tempo (mais de uma trilha simultânea); qual delas está "em uso" na
+ * sessão atual é resolvido por `activeEnrollmentService.ts`, nunca guardado
+ * permanentemente num único campo do usuário.
+ */
+export interface Enrollment {
+  id: string;
+  user_id: string;
+  program_id: string;
+  track_id: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Phase {

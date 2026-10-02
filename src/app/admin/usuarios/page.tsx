@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getCurrentSession } from "@/lib/auth/getSession";
 import { listUsersWithTrack } from "@/lib/repositories/usersRepository";
-import { listActiveTracks } from "@/lib/repositories/tracksRepository";
+import { listActiveEnrollmentsForUsers } from "@/lib/repositories/enrollmentsRepository";
+import { listActivePrograms } from "@/lib/repositories/programsRepository";
 import { computeUsersProgressBatch, computeTrackStatus } from "@/lib/services/userProgress";
 import { theme } from "@/lib/ui/theme";
 import { Header } from "@/components/ui/Header";
@@ -16,26 +17,34 @@ export default async function UsuariosPage() {
   if (!session) redirect("/login");
   if (session.role !== "admin") redirect("/app");
 
-  const [users, tracks] = await Promise.all([listUsersWithTrack(), listActiveTracks()]);
+  const [users, programs] = await Promise.all([listUsersWithTrack(), listActivePrograms()]);
+  const enrollmentsByUserId = await listActiveEnrollmentsForUsers(users.map((u) => u.id));
 
   // Antes: 1 chamada de computeUserProgress (2 consultas cada) POR
   // usuário, via Promise.all — 2×N consultas simultâneas ao Supabase.
   // Sob a base real de produção isso é candidato a estourar limite de
-  // conexão/timeout. Agora: 2 consultas no total, para qualquer N.
+  // conexão/timeout. Agora: 2 consultas no total, para qualquer N (mais
+  // uma pelas matrículas em lote) — nunca N consultas por usuário.
   const progressByUserId = await computeUsersProgressBatch(
-    users.map((u) => ({ id: u.id, program_id: u.program_id, track_id: u.track_id }))
+    users.map((u) => ({
+      id: u.id,
+      enrollments: (enrollmentsByUserId.get(u.id) ?? []).map((e) => ({
+        program_id: e.program_id,
+        track_id: e.track_id,
+      })),
+    }))
   );
 
   const rows: UserRow[] = users.map((u) => {
     const progress = progressByUserId.get(u.id) ?? { totalModules: 0, completedModules: 0, percent: null };
+    const enrollments = enrollmentsByUserId.get(u.id) ?? [];
     return {
       id: u.id,
       nome_completo: u.nome_completo,
       matricula: u.matricula,
       login: u.login,
-      program_nome: u.program?.nome ?? "—",
-      track_id: u.track_id,
-      track_nome: u.track?.nome ?? "—",
+      program_ids: enrollments.map((e) => e.program_id),
+      programas_nomes: enrollments.map((e) => e.program_nome),
       cd: u.cd,
       turno: u.turno,
       status: u.status,
@@ -67,7 +76,7 @@ export default async function UsuariosPage() {
           </Link>
         </div>
 
-        <UsersTable initialUsers={rows} tracks={tracks.map((t) => ({ id: t.id, nome: t.nome }))} />
+        <UsersTable initialUsers={rows} programs={programs.map((p) => ({ id: p.id, nome: p.nome }))} />
       </Container>
     </PageShell>
   );

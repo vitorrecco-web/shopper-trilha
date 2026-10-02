@@ -2,6 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getCurrentSession } from "@/lib/auth/getSession";
 import { getUserById } from "@/lib/repositories/usersRepository";
+import { resolveActiveEnrollment } from "@/lib/services/activeEnrollmentService";
 import { getModuleAccessInfo } from "@/lib/services/moduleAccessService";
 import { theme } from "@/lib/ui/theme";
 import { Header } from "@/components/ui/Header";
@@ -20,10 +21,14 @@ export default async function QuizPage({ params }: { params: { id: string } }) {
   if (!session) redirect("/login");
 
   const user = await getUserById(session.userId);
-  if (!user || user.status === "inactive" || !user.program_id) redirect("/login");
+  if (!user || user.status === "inactive") redirect("/login");
+
+  const active = await resolveActiveEnrollment(user.id, session.activeProgramId);
+  if (active.status === "choose") redirect("/app/trilhas");
+  if (active.status === "none") redirect("/app");
 
   const moduleHref = `/app/modulo/${params.id}`;
-  const access = await getModuleAccessInfo(user.id, user.program_id, user.track_id, params.id);
+  const access = await getModuleAccessInfo(user.id, active.enrollment.programId, active.enrollment.trackId, params.id);
   if (!access) notFound();
   if (!access.unlocked || !access.module.has_questions) redirect(moduleHref);
   if (!access.materialAccessed) redirect(moduleHref);

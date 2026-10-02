@@ -138,7 +138,8 @@ export default async function IndicadoresPage() {
                       {c.nomeCompleto}
                     </Link>
                     <span style={{ fontSize: 12, color: theme.color.textFaint, marginLeft: 8 }}>
-                      {c.trackNome ?? "—"} · {trackStatusLabel[c.trackStatus]}
+                      {c.programasNomes.length > 0 ? c.programasNomes.join(", ") : "—"} ·{" "}
+                      {trackStatusLabel[c.trackStatus]}
                     </span>
                   </div>
                   <span style={{ display: "flex", gap: 6 }}>

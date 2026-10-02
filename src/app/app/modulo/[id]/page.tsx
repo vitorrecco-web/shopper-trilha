@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { getCurrentSession } from "@/lib/auth/getSession";
 import { getUserById } from "@/lib/repositories/usersRepository";
+import { resolveActiveEnrollment } from "@/lib/services/activeEnrollmentService";
 import { getModuleAccessInfo } from "@/lib/services/moduleAccessService";
 import { theme } from "@/lib/ui/theme";
 import { Header } from "@/components/ui/Header";
@@ -19,9 +20,13 @@ export default async function ModuloPage({ params }: { params: { id: string } })
   if (!session) redirect("/login");
 
   const user = await getUserById(session.userId);
-  if (!user || user.status === "inactive" || !user.program_id) redirect("/login");
+  if (!user || user.status === "inactive") redirect("/login");
 
-  const access = await getModuleAccessInfo(user.id, user.program_id, user.track_id, params.id);
+  const active = await resolveActiveEnrollment(user.id, session.activeProgramId);
+  if (active.status === "choose") redirect("/app/trilhas");
+  if (active.status === "none") redirect("/app");
+
+  const access = await getModuleAccessInfo(user.id, active.enrollment.programId, active.enrollment.trackId, params.id);
   if (!access) notFound();
   if (!access.unlocked) redirect("/app");
 

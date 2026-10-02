@@ -1,7 +1,14 @@
 import "server-only";
-import type { Module } from "@/lib/db/types";
-import { listUsersWithTrack, getUserWithTrackById, type UserWithTrack } from "@/lib/repositories/usersRepository";
+import type { Module, User } from "@/lib/db/types";
+import { listUsersWithTrack, getUserById } from "@/lib/repositories/usersRepository";
+import {
+  listActiveEnrollmentsForUsers,
+  listActiveEnrollmentsForUser,
+  type EnrollmentWithNames,
+} from "@/lib/repositories/enrollmentsRepository";
 import { listAllModules, getModuleById } from "@/lib/repositories/modulesRepository";
+import { getPhaseById, listAllPhases } from "@/lib/repositories/phasesRepository";
+import { listAllPrograms } from "@/lib/repositories/programsRepository";
 import {
   listAllAttempts,
   listAttemptsForModule,
@@ -50,7 +57,8 @@ export interface WrongQuestionStat {
 export interface ColaboradorPerformance {
   userId: string;
   nomeCompleto: string;
-  trackNome: string | null;
+  /** Nomes dos Programas (trilhas) em que o colaborador está matriculado — pode ter mais de um. */
+  programasNomes: string[];
   trackStatus: TrackStatus;
   completionPercent: number | null;
   quizAttempts: number;
@@ -204,7 +212,8 @@ function toWrongQuestionList(modules: Module[], wrongByQuestion: Map<string, Wro
 }
 
 function toColaboradorList(
-  students: UserWithTrack[],
+  students: User[],
+  enrollmentsByUserId: Map<string, EnrollmentWithNames[]>,
   progressByUserId: Map<string, UserProgress>,
   perfByUser: Map<string, UserAgg>
 ): ColaboradorPerformance[] {
@@ -217,7 +226,7 @@ function toColaboradorList(
     return {
       userId: u.id,
       nomeCompleto: u.nome_completo,
-      trackNome: u.track?.nome ?? null,
+      programasNomes: (enrollmentsByUserId.get(u.id) ?? []).map((e) => e.program_nome),
       trackStatus: computeTrackStatus(progress.percent),
       completionPercent: progress.percent,
       quizAttempts: perf?.attemptsTotal ?? 0,
@@ -229,20 +238,28 @@ function toColaboradorList(
 }
 
 async function getEligibleStudentsWithProgress(): Promise<{
-  students: UserWithTrack[];
+  students: User[];
+  enrollmentsByUserId: Map<string, EnrollmentWithNames[]>;
   progressByUserId: Map<string, UserProgress>;
 }> {
-  const usersWithTrack = await listUsersWithTrack();
-  const students = usersWithTrack.filter((u) => u.role === "student" && u.status === "active");
+  const allUsers = await listUsersWithTrack();
+  const students = allUsers.filter((u) => u.role === "student" && u.status === "active");
+  const enrollmentsByUserId = await listActiveEnrollmentsForUsers(students.map((u) => u.id));
   const progressByUserId = await computeUsersProgressBatch(
-    students.map((u) => ({ id: u.id, program_id: u.program_id, track_id: u.track_id }))
+    students.map((u) => ({
+      id: u.id,
+      enrollments: (enrollmentsByUserId.get(u.id) ?? []).map((e) => ({
+        program_id: e.program_id,
+        track_id: e.track_id,
+      })),
+    }))
   );
-  return { students, progressByUserId };
+  return { students, enrollmentsByUserId, progressByUserId };
 }
 
 /** Visão geral de /admin/indicadores — KPIs + top 5 "que precisa de atenção" de cada lista. */
 export async function getDashboardOverview(): Promise<DashboardOverview> {
-  const [{ students, progressByUserId }, { modules, aggregates }] = await Promise.all([
+  const [{ students, enrollmentsByUserId, progressByUserId }, { modules, aggregates }] = await Promise.all([
     getEligibleStudentsWithProgress(),
     buildAggregates(),
   ]);
@@ -255,7 +272,7 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
 
   const modulePerformance = toModulePerformanceList(modules, aggregates.perfByModule);
   const wrongQuestions = toWrongQuestionList(modules, aggregates.wrongByQuestion);
-  const colaboradores = toColaboradorList(students, progressByUserId, aggregates.perfByUser);
+  const colaboradores = toColaboradorList(students, enrollmentsByUserId, progressByUserId, aggregates.perfByUser);
 
   const totalAttempts = modulePerformance.reduce((sum, m) => sum + m.attempts, 0);
   const totalPassed = [...aggregates.perfByModule.values()].reduce((sum, p) => sum + p.passed, 0);
@@ -304,11 +321,11 @@ export async function getAllWrongQuestions(moduleId?: string): Promise<WrongQues
 
 /** Lista completa para /admin/indicadores/colaboradores. */
 export async function getAllColaboradores(): Promise<ColaboradorPerformance[]> {
-  const [{ students, progressByUserId }, { aggregates }] = await Promise.all([
+  const [{ students, enrollmentsByUserId, progressByUserId }, { aggregates }] = await Promise.all([
     getEligibleStudentsWithProgress(),
     buildAggregates(),
   ]);
-  return toColaboradorList(students, progressByUserId, aggregates.perfByUser);
+  return toColaboradorList(students, enrollmentsByUserId, progressByUserId, aggregates.perfByUser);
 }
 
 export interface ModuleUserRow {
@@ -338,6 +355,7 @@ export async function getModuleUserBreakdown(moduleId: string): Promise<ModuleUs
 
   if (!module_) return null;
 
+  const phase = await getPhaseById(module_.phase_id);
   const userById = new Map(usersWithTrack.map((u) => [u.id, u]));
 
   const byUser = new Map<
@@ -370,13 +388,21 @@ export async function getModuleUserBreakdown(moduleId: string): Promise<ModuleUs
     }
   }
 
+  // A função ("trackNome") mostrada é a da matrícula do usuário NO
+  // PROGRAMA deste módulo especificamente — um usuário pode ter outra
+  // função numa trilha diferente, isso não deve vazar aqui.
+  const enrollmentsByUserId = phase
+    ? await listActiveEnrollmentsForUsers([...byUser.keys()])
+    : new Map<string, EnrollmentWithNames[]>();
+
   const rows: ModuleUserRow[] = [...byUser.entries()]
     .map(([userId, agg]) => {
       const user = userById.get(userId);
+      const enrollment = (enrollmentsByUserId.get(userId) ?? []).find((e) => e.program_id === phase?.program_id);
       return {
         userId,
         nomeCompleto: user?.nome_completo ?? "Usuário removido",
-        trackNome: user?.track?.nome ?? null,
+        trackNome: enrollment?.track_nome ?? null,
         attempts: agg.attempts,
         bestScore: agg.bestScore,
         lastScore: agg.lastScore,
@@ -396,6 +422,7 @@ export async function getModuleUserBreakdown(moduleId: string): Promise<ModuleUs
 export interface UserModuleHistoryRow {
   moduleId: string;
   moduleNome: string;
+  programNome: string | null;
   attempts: number;
   bestScore: number;
   lastScore: number;
@@ -406,21 +433,27 @@ export interface UserModuleHistoryRow {
 export interface UserModuleHistory {
   userId: string;
   nomeCompleto: string;
-  trackNome: string | null;
+  /** Nomes dos Programas (trilhas) em que o colaborador está matriculado — pode ter mais de um. */
+  programasNomes: string[];
   rows: UserModuleHistoryRow[];
 }
 
 /** Drill-down "em quais módulos" um colaborador específico está indo bem/mal. */
 export async function getUserModuleHistory(userId: string): Promise<UserModuleHistory | null> {
-  const [user, attempts, modules] = await Promise.all([
-    getUserWithTrackById(userId),
+  const [user, attempts, modules, phases, programs, enrollments] = await Promise.all([
+    getUserById(userId),
     listAttemptsForUser(userId),
     listAllModules(),
+    listAllPhases(),
+    listAllPrograms(),
+    listActiveEnrollmentsForUser(userId),
   ]);
 
   if (!user) return null;
 
   const moduleById = new Map(modules.map((m) => [m.id, m]));
+  const phaseById = new Map(phases.map((p) => [p.id, p]));
+  const programById = new Map(programs.map((p) => [p.id, p]));
 
   const byModule = new Map<
     string,
@@ -453,19 +486,30 @@ export async function getUserModuleHistory(userId: string): Promise<UserModuleHi
   }
 
   const rows: UserModuleHistoryRow[] = [...byModule.entries()]
-    .map(([moduleId, agg]) => ({
-      moduleId,
-      moduleNome: moduleById.get(moduleId)?.nome ?? "Módulo removido",
-      attempts: agg.attempts,
-      bestScore: agg.bestScore,
-      lastScore: agg.lastScore,
-      passed: agg.passed,
-      lastAttemptAt: agg.lastAt,
-    }))
+    .map(([moduleId, agg]) => {
+      const module_ = moduleById.get(moduleId);
+      const phase = module_ ? phaseById.get(module_.phase_id) : undefined;
+      const program = phase ? programById.get(phase.program_id) : undefined;
+      return {
+        moduleId,
+        moduleNome: module_?.nome ?? "Módulo removido",
+        programNome: program?.nome ?? null,
+        attempts: agg.attempts,
+        bestScore: agg.bestScore,
+        lastScore: agg.lastScore,
+        passed: agg.passed,
+        lastAttemptAt: agg.lastAt,
+      };
+    })
     .sort((a, b) => {
       if (a.passed !== b.passed) return a.passed ? 1 : -1;
       return a.bestScore - b.bestScore;
     });
 
-  return { userId: user.id, nomeCompleto: user.nome_completo, trackNome: user.track?.nome ?? null, rows };
+  return {
+    userId: user.id,
+    nomeCompleto: user.nome_completo,
+    programasNomes: enrollments.map((e) => e.program_nome),
+    rows,
+  };
 }

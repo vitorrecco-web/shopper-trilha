@@ -47,6 +47,8 @@ if (existing) {
   process.exit(1);
 }
 
+// Admin não tem Programa/Função atribuído — não é um aluno, não pertence
+// a uma matrícula (ver src/lib/repositories/enrollmentsRepository.ts).
 const { data, error } = await supabase
   .from("users")
   .insert({
@@ -55,7 +57,6 @@ const { data, error } = await supabase
     password_hash: passwordHash,
     role: "admin",
     status: "active",
-    track_id: null,
   })
   .select("id, nome_completo, login, role")
   .single();

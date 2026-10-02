@@ -192,6 +192,22 @@ Quem já tinha o sistema rodando com uma única trilha (`GOOGLE_DRIVE_ROOT_FOLDE
 
 Um Programa novo (segunda trilha em diante) não precisa de nenhum passo de banco — basta criar a pasta dele dentro de `Universidade Shopper/` seguindo a mesma convenção, e sincronizar.
 
+### Matrículas — um login pode ter mais de uma trilha
+
+Um mesmo colaborador pode estar matriculado em vários Programas ao mesmo tempo (ex: já é Supervisor de Picking e também vai fazer a Trilha de Logística). Isso vive na tabela `enrollments` (`src/lib/repositories/enrollmentsRepository.ts`) — nunca em `users`, que não guarda mais Programa/Função.
+
+- **Cadastro** (`/admin/usuarios/novo`): o formulário tem uma lista repetível de trilhas (Programa + Função, "+ Adicionar trilha").
+- **Usuário existente** (`/admin/usuarios/[id]`): seção "Trilhas" permite adicionar uma trilha nova ou remover (soft-delete, sem apagar progresso/histórico) uma já existente.
+- **Login do aluno**: com 1 matrícula só, nada muda — entra direto em "Minha Trilha". Com 2+, aparece a tela **"Escolha sua trilha"** (`/app/trilhas`) a cada login; um link **"Trocar de trilha"** no cabeçalho permite trocar sem precisar deslogar. Qual trilha está "em uso" fica só na sessão (`session.activeProgramId`), nunca salvo permanentemente — ver `src/lib/services/activeEnrollmentService.ts`.
+
+Migração de quem já tinha `users.program_id`/`track_id` preenchido (mesmo padrão seguro de sempre, aditivo + backfill):
+
+1. Aplicar `supabase/migrations/0009_enrollments.sql`.
+2. Rodar `node --env-file=.env.local scripts/backfill-enrollments.mjs` — cria 1 matrícula para cada usuário que já tinha `program_id` preenchido. Idempotente.
+3. Conferir que não sobrou ninguém sem matrícula equivalente, só então aplicar `supabase/migrations/0010_drop_users_program_track.sql` (remove as colunas antigas de `users`).
+
+O código novo já não lê `users.program_id`/`track_id` em nenhum lugar — o passo 3 pode ser feito a qualquer momento depois do passo 2, sem pressa de sincronizar com o deploy do código.
+
 ### Como aplicar uma mudança
 
 1. Editar as pastas/arquivos no Drive como preferir (adicionar módulo, renomear fase, trocar o PDF, etc).

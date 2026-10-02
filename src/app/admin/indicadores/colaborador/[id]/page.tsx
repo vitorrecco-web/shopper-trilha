@@ -43,8 +43,8 @@ export default async function ColaboradorIndicadorPage({ params }: { params: { i
         />
         <h1 style={{ fontSize: theme.font.size.xxl, marginTop: 0, marginBottom: 4 }}>{data.nomeCompleto}</h1>
         <p style={{ color: theme.color.textMuted, fontSize: theme.font.size.sm, marginBottom: theme.space(5) }}>
-          {data.trackNome ?? "Sem trilha"} · Desempenho em quiz por módulo — quem ainda não passou aparece
-          primeiro.{" "}
+          {data.programasNomes.length > 0 ? data.programasNomes.join(", ") : "Sem trilha"} · Desempenho em quiz
+          por módulo — quem ainda não passou aparece primeiro.{" "}
           <Link href={`/admin/usuarios/${data.userId}`} style={{ color: theme.color.primaryDark }}>
             Ver cadastro completo →
           </Link>
@@ -61,6 +61,7 @@ export default async function ColaboradorIndicadorPage({ params }: { params: { i
                 <thead>
                   <tr style={{ textAlign: "left", color: theme.color.textFaint, fontSize: theme.font.size.xs }}>
                     <th style={{ padding: "6px 8px" }}>Módulo</th>
+                    <th style={{ padding: "6px 8px" }}>Programa</th>
                     <th style={{ padding: "6px 8px" }}>Tentativas</th>
                     <th style={{ padding: "6px 8px" }}>Melhor nota</th>
                     <th style={{ padding: "6px 8px" }}>Última nota</th>
@@ -79,6 +80,7 @@ export default async function ColaboradorIndicadorPage({ params }: { params: { i
                           {row.moduleNome}
                         </Link>
                       </td>
+                      <td style={{ padding: "8px", color: theme.color.textMuted }}>{row.programNome ?? "—"}</td>
                       <td style={{ padding: "8px" }}>{row.attempts}</td>
                       <td style={{ padding: "8px" }}>{row.bestScore}%</td>
                       <td style={{ padding: "8px" }}>{row.lastScore}%</td>

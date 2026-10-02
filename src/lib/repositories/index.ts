@@ -1,4 +1,5 @@
 export * as programsRepository from "./programsRepository";
+export * as enrollmentsRepository from "./enrollmentsRepository";
 export * as tracksRepository from "./tracksRepository";
 export * as usersRepository from "./usersRepository";
 export * as phasesRepository from "./phasesRepository";

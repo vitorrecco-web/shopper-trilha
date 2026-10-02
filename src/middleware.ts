@@ -15,6 +15,8 @@ import { getSessionOptions, type SessionData } from "@/lib/auth/session";
  *                   garante que existe uma sessão.
  * - /api/assistente/** idem — qualquer usuário autenticado (admin ou
  *                   student), a rota em si também revalida a sessão.
+ * - /api/app/**     idem — hoje só /api/app/escolher-trilha (grava qual
+ *                   matrícula o aluno está usando nesta sessão).
  * - /login          se já autenticado, redireciona para a home certa
  *
  * Middleware roda no Edge runtime — iron-session v8 é compatível.
@@ -45,7 +47,7 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  if (pathname.startsWith("/api/modulos") || pathname.startsWith("/api/assistente")) {
+  if (pathname.startsWith("/api/modulos") || pathname.startsWith("/api/assistente") || pathname.startsWith("/api/app")) {
     if (!isAuthenticated) {
       return NextResponse.json({ ok: false, error: "Não autenticado." }, { status: 401 });
     }
@@ -79,6 +81,7 @@ export const config = {
     "/api/admin/:path*",
     "/api/modulos/:path*",
     "/api/assistente/:path*",
+    "/api/app/:path*",
     "/app/:path*",
   ],
 };

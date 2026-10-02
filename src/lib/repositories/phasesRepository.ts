@@ -24,6 +24,14 @@ export async function listAllPhases(): Promise<Phase[]> {
   return data as Phase[];
 }
 
+export async function getPhaseById(id: string): Promise<Phase | null> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.from("phases").select("*").eq("id", id).maybeSingle();
+
+  if (error) throw error;
+  return data as Phase | null;
+}
+
 export async function getPhaseByDriveFolderId(driveFolderId: string): Promise<Phase | null> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase

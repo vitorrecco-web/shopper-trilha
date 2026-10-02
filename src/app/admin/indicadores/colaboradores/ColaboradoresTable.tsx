@@ -29,7 +29,7 @@ export function ColaboradoresTable({ colaboradores }: { colaboradores: Colaborad
     const term = normalize(search.trim());
     return colaboradores
       .filter((c) => (onlyAttention ? c.modulesFailingOnly > 0 : true))
-      .filter((c) => (term ? normalize(`${c.nomeCompleto} ${c.trackNome ?? ""}`).includes(term) : true));
+      .filter((c) => (term ? normalize(`${c.nomeCompleto} ${c.programasNomes.join(" ")}`).includes(term) : true));
   }, [colaboradores, search, onlyAttention]);
 
   const fieldStyle: React.CSSProperties = {
@@ -69,7 +69,7 @@ export function ColaboradoresTable({ colaboradores }: { colaboradores: Colaborad
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: theme.font.size.sm, minWidth: 760 }}>
           <thead>
             <tr style={{ background: theme.color.bg, textAlign: "left" }}>
-              {["Colaborador", "Trilha", "Situação", "Conclusão", "Tentativas de quiz", "Nota média", "Módulos travados"].map(
+              {["Colaborador", "Programas", "Situação", "Conclusão", "Tentativas de quiz", "Nota média", "Módulos travados"].map(
                 (h) => (
                   <th key={h} style={{ padding: "12px 14px", color: theme.color.textMuted, fontWeight: 600, fontSize: theme.font.size.xs }}>
                     {h}
@@ -89,7 +89,9 @@ export function ColaboradoresTable({ colaboradores }: { colaboradores: Colaborad
                     {c.nomeCompleto}
                   </Link>
                 </td>
-                <td style={{ padding: "12px 14px" }}>{c.trackNome ?? "—"}</td>
+                <td style={{ padding: "12px 14px" }}>
+                  {c.programasNomes.length > 0 ? c.programasNomes.join(", ") : "—"}
+                </td>
                 <td style={{ padding: "12px 14px" }}>
                   <Badge tone={trackStatusTone[c.trackStatus]}>{trackStatusLabel[c.trackStatus]}</Badge>
                 </td>
