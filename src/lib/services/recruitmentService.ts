@@ -151,7 +151,8 @@ export async function setPhaseAreaLabel(phaseId: string, kind: "logica" | "area"
   const label = kind === "logica" ? LOGIC_AREA_LABEL : (rawLabel ?? "").trim();
   if (!label) throw new Error("Informe o nome da área.");
   const key = kind === "logica" ? LOGIC_AREA_KEY : slugifyAreaKey(label);
-  if (!key || key === LOGIC_AREA_KEY) throw new Error("Nome de área inválido ou reservado.");
+  // "logica" é reservado para o teste de lógica — uma área livre não pode usar esse nome.
+  if (kind === "area" && (!key || key === LOGIC_AREA_KEY)) throw new Error("Nome de área inválido ou reservado.");
 
   await upsertPhaseArea({ phase_id: phaseId, area_key: key, area_label: label });
   await backfillResultsForPhase(phaseId);
