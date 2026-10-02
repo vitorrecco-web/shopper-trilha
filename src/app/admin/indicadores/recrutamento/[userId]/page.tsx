@@ -3,27 +3,50 @@ import Link from "next/link";
 import { getCurrentSession } from "@/lib/auth/getSession";
 import { canViewIndicadores } from "@/lib/auth/roles";
 import { getCandidateDetail } from "@/lib/services/recruitmentReportService";
+import type { FitDetail, FitStatus } from "@/lib/services/recruitmentAnalysis";
 import { theme } from "@/lib/ui/theme";
 import { Header } from "@/components/ui/Header";
 import { PageShell, Container } from "@/components/ui/Container";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { Badge } from "@/components/ui/Badge";
+import { Collapsible } from "@/components/ui/Collapsible";
+import { HBars, ScoreBar, type BarTone } from "@/components/ui/Charts";
 import { fitLabel, fitTone, fmtScore } from "../fitUi";
 
-const boxStyle: React.CSSProperties = {
+const cardStyle: React.CSSProperties = {
   background: theme.color.surface,
   border: `1px solid ${theme.color.border}`,
   borderRadius: theme.radius.lg,
   boxShadow: theme.shadow.sm,
   padding: theme.space(4),
-  marginBottom: theme.space(4),
 };
-const th: React.CSSProperties = { textAlign: "left", padding: "8px 10px", fontSize: theme.font.size.xs, color: theme.color.textMuted, fontWeight: 600, whiteSpace: "nowrap" };
-const td: React.CSSProperties = { padding: "8px 10px", fontSize: theme.font.size.sm, color: theme.color.text, verticalAlign: "top" };
-const h2: React.CSSProperties = { fontSize: theme.font.size.md, margin: "0 0 10px", color: theme.color.text };
+const hint: React.CSSProperties = { fontSize: theme.font.size.xs, color: theme.color.textMuted, margin: "0 0 12px" };
+const bigNumber: React.CSSProperties = { fontSize: theme.font.size.xxl, fontWeight: 700 };
+const cardLabel: React.CSSProperties = { fontSize: theme.font.size.xs, color: theme.color.textMuted, marginTop: 4 };
+
+const barTone: Record<FitStatus, BarTone> = { atinge: "primary", quase: "warning", abaixo: "danger", aguardando: "neutral" };
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+
+/** Uma linha "tirou X de mínimo Y" com barra e marcador do corte. */
+function FitLine({ title, fit, cutoff, scoreKey }: { title: string; fit: FitDetail; cutoff: number; scoreKey: "logicScore" | "areaScore" }) {
+  const score = fit[scoreKey];
+  const gap = scoreKey === "logicScore" ? fit.logicGap : fit.areaGap;
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", fontSize: 13, marginBottom: 4 }}>
+        <span style={{ color: theme.color.textMuted }}>{title}</span>
+        <span>
+          <b style={{ color: score === null ? theme.color.textFaint : theme.color.text }}>{score === null ? "sem nota" : fmtScore(score)}</b>
+          <span style={{ color: theme.color.textMuted }}> de mínimo {fmtScore(cutoff)}</span>
+          {gap ? <span style={{ color: theme.color.danger }}> · faltam {fmtScore(gap)}</span> : null}
+        </span>
+      </div>
+      <ScoreBar value={score} marker={cutoff} tone={barTone[fit.status]} />
+    </div>
+  );
 }
 
 export default async function CandidatoRecrutamentoPage({ params }: { params: { userId: string } }) {
@@ -34,6 +57,8 @@ export default async function CandidatoRecrutamentoPage({ params }: { params: { 
   const detail = await getCandidateDetail(params.userId).catch(() => null);
   if (!detail) notFound();
   const { analysis } = detail;
+  const logicModules = analysis.logic?.modules ?? [];
+  const totalAttempts = detail.moduleAttempts.reduce((sum, m) => sum + m.attempts.length, 0);
 
   return (
     <PageShell>
@@ -55,156 +80,207 @@ export default async function CandidatoRecrutamentoPage({ params }: { params: { 
           </Link>
         </p>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: theme.space(4), marginBottom: theme.space(4) }}>
-          <div style={boxStyle}>
-            <div style={{ fontSize: theme.font.size.xxl, fontWeight: 700, color: theme.color.primaryDark }}>{fmtScore(analysis.logic?.best)}</div>
-            <div style={{ fontSize: theme.font.size.xs, color: theme.color.textMuted, marginTop: 4 }}>Teste de lógica — melhor tentativa</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: theme.space(4), marginBottom: theme.space(4) }}>
+          <div style={cardStyle}>
+            <div style={{ ...bigNumber, color: theme.color.primaryDark }}>{fmtScore(analysis.logic?.best)}</div>
+            <div style={cardLabel}>Nota em lógica — melhor tentativa de cada módulo (de 0 a 100)</div>
           </div>
-          <div style={boxStyle}>
-            <div style={{ fontSize: theme.font.size.xxl, fontWeight: 700 }}>{fmtScore(analysis.logic?.avg)}</div>
-            <div style={{ fontSize: theme.font.size.xs, color: theme.color.textMuted, marginTop: 4 }}>Teste de lógica — média de todas as tentativas</div>
+          <div style={cardStyle}>
+            <div style={bigNumber}>{fmtScore(analysis.logic?.avg)}</div>
+            <div style={cardLabel}>Nota em lógica — média de todas as tentativas (de 0 a 100)</div>
           </div>
-          <div style={boxStyle}>
-            <div style={{ fontSize: theme.font.size.xl, fontWeight: 700 }}>
+          <div style={cardStyle}>
+            <div style={{ ...bigNumber, fontSize: theme.font.size.xl }}>
               {analysis.logicModulesDone}/{analysis.logicModulesExpected || "?"}
             </div>
-            <div style={{ fontSize: theme.font.size.xs, color: theme.color.textMuted, marginTop: 4 }}>
-              Módulos de lógica feitos {analysis.logicComplete ? "(concluído)" : "(em andamento — sem recomendação definitiva)"}
+            <div style={cardLabel}>
+              Módulos de lógica feitos {analysis.logicComplete ? "(concluído)" : "(em andamento — ainda sem recomendação definitiva)"}
             </div>
           </div>
         </div>
+        <p style={{ ...hint, marginBottom: theme.space(4) }}>
+          A nota é o % de acertos nas questões (cada módulo conta pelo número de questões). A &quot;melhor tentativa&quot; usa o melhor resultado de
+          cada módulo; a &quot;média&quot; considera todas as tentativas feitas.
+        </p>
 
-        <div style={boxStyle}>
-          <h2 style={h2}>Vagas de interesse × encaixe</h2>
-          {detail.interests.length === 0 ? (
-            <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: 0 }}>O candidato ainda não informou vagas de interesse.</p>
-          ) : (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {detail.interests.map((i) => {
-                const alert = detail.alertVacancyIds.includes(i.vacancyId);
-                return (
-                  <Badge key={i.vacancyId} tone={alert ? "warning" : "neutral"}>
-                    {i.nome}
-                    {!i.active ? " (encerrada)" : ""}
-                    {alert ? " — abaixo do corte" : ""}
-                  </Badge>
-                );
-              })}
-            </div>
-          )}
-          {analysis.ranking.length > 0 && (
-            <p style={{ fontSize: theme.font.size.sm, color: theme.color.text, margin: "12px 0 0" }}>
-              <b>Melhor possibilidade:</b> {analysis.ranking.map((r) => r.vacancy.nome).join(", ")}
-            </p>
-          )}
-        </div>
-
-        <div style={boxStyle}>
-          <h2 style={h2}>Encaixe por vaga (cortes atuais)</h2>
+        <Collapsible
+          title="Encaixe por vaga — nota × mínimo exigido"
+          summary={analysis.ranking.length > 0 ? `melhor possibilidade: ${analysis.ranking[0].vacancy.nome}` : analysis.logicComplete ? "nenhuma vaga atingida" : "em andamento"}
+          defaultOpen
+        >
+          <p style={hint}>
+            Em cada barra o traço escuro marca a nota mínima da vaga. Verde = atinge, amarelo = até 10 pontos abaixo, vermelho = mais de 10 pontos abaixo.
+          </p>
           {analysis.fits.length === 0 ? (
             <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: 0 }}>Nenhuma vaga ativa cadastrada.</p>
           ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${theme.color.border}` }}>
-                    <th style={th}>Vaga</th>
-                    <th style={th}>Corte lógica</th>
-                    <th style={th}>Área / corte</th>
-                    <th style={th}>Melhor tentativa</th>
-                    <th style={th}>Média de todas</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {analysis.fits.map((f) => (
-                    <tr key={f.vacancy.id} style={{ borderTop: `1px solid ${theme.color.border}` }}>
-                      <td style={{ ...td, fontWeight: 600 }}>{f.vacancy.nome}</td>
-                      <td style={td}>{fmtScore(f.vacancy.logic_cutoff)}</td>
-                      <td style={td}>
-                        {f.vacancy.area_key ? `${f.vacancy.area_key}${f.vacancy.area_cutoff !== null ? ` · ${fmtScore(f.vacancy.area_cutoff)}` : ""}` : "—"}
-                      </td>
-                      <td style={td}>
-                        <Badge tone={fitTone[f.best.status]}>{fitLabel[f.best.status]}</Badge>
-                        {f.best.logicGap ? <span style={{ fontSize: theme.font.size.xs, color: theme.color.textMuted }}> faltam {fmtScore(f.best.logicGap)} (lógica)</span> : null}
-                      </td>
-                      <td style={td}>
-                        <Badge tone={fitTone[f.avg.status]}>{fitLabel[f.avg.status]}</Badge>
-                        {f.avg.logicGap ? <span style={{ fontSize: theme.font.size.xs, color: theme.color.textMuted }}> faltam {fmtScore(f.avg.logicGap)} (lógica)</span> : null}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            analysis.fits.map((f) => {
+              const interested = detail.interests.some((i) => i.vacancyId === f.vacancy.id);
+              return (
+                <Collapsible
+                  key={f.vacancy.id}
+                  nested
+                  title={
+                    <>
+                      {f.vacancy.nome}{" "}
+                      {interested && <Badge tone="primary">interesse</Badge>}
+                    </>
+                  }
+                  summary={
+                    <span style={{ display: "inline-flex", gap: 6 }}>
+                      <Badge tone={fitTone[f.best.status]}>melhor: {fitLabel[f.best.status]}</Badge>
+                      <Badge tone={fitTone[f.avg.status]}>média: {fitLabel[f.avg.status]}</Badge>
+                    </span>
+                  }
+                >
+                  <FitLine title="Lógica — melhor tentativa" fit={f.best} cutoff={f.vacancy.logic_cutoff} scoreKey="logicScore" />
+                  <FitLine title="Lógica — média de todas as tentativas" fit={f.avg} cutoff={f.vacancy.logic_cutoff} scoreKey="logicScore" />
+                  {f.vacancy.area_key && f.vacancy.area_cutoff !== null && (
+                    <>
+                      <FitLine title={`Área ${f.vacancy.area_key} — melhor tentativa`} fit={f.best} cutoff={f.vacancy.area_cutoff} scoreKey="areaScore" />
+                      <FitLine title={`Área ${f.vacancy.area_key} — média`} fit={f.avg} cutoff={f.vacancy.area_cutoff} scoreKey="areaScore" />
+                    </>
+                  )}
+                </Collapsible>
+              );
+            })
           )}
-        </div>
+          {detail.interests.length > 0 && (
+            <p style={{ fontSize: theme.font.size.sm, color: theme.color.text, margin: "12px 0 0" }}>
+              <b>Vagas de interesse:</b>{" "}
+              {detail.interests.map((i) => (
+                <Badge key={i.vacancyId} tone={detail.alertVacancyIds.includes(i.vacancyId) ? "warning" : "neutral"}>
+                  {i.nome}
+                  {!i.active ? " (encerrada)" : ""}
+                  {detail.alertVacancyIds.includes(i.vacancyId) ? " — abaixo do corte" : ""}
+                </Badge>
+              ))}
+            </p>
+          )}
+        </Collapsible>
 
-        <div style={boxStyle}>
-          <h2 style={h2}>Teste de lógica por habilidade</h2>
-          {analysis.logic === null ? (
+        <Collapsible title="Teste de lógica por habilidade" summary={`${logicModules.length} módulo${logicModules.length === 1 ? "" : "s"}`}>
+          <p style={hint}>
+            Barra = melhor tentativa; o traço cinza marca a média de todas as tentativas. Pontos fortes: nota a partir de 80. A desenvolver: abaixo de 60.
+          </p>
+          {logicModules.length === 0 ? (
             <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: 0 }}>Nenhuma tentativa registrada ainda.</p>
           ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 520 }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${theme.color.border}` }}>
-                    <th style={th}>Módulo</th>
-                    <th style={th}>Tentativas</th>
-                    <th style={th}>Melhor</th>
-                    <th style={th}>Média</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {analysis.logic.modules.map((m) => (
-                    <tr key={m.module_id} style={{ borderTop: `1px solid ${theme.color.border}` }}>
-                      <td style={td}>{m.module_nome}</td>
-                      <td style={td}>{m.attempts}</td>
-                      <td style={td}>{fmtScore(Math.round(m.best * 10) / 10)}</td>
-                      <td style={td}>{fmtScore(Math.round(m.avg * 10) / 10)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <HBars
+              labelWidth={230}
+              rows={logicModules.map((m) => ({
+                key: m.module_id,
+                label: (
+                  <>
+                    {m.module_nome}
+                    <div style={{ fontSize: 11, color: theme.color.textFaint }}>
+                      {m.attempts} tentativa{m.attempts === 1 ? "" : "s"}
+                    </div>
+                  </>
+                ),
+                value: Math.round(m.best * 10) / 10,
+                marker2: Math.round(m.avg * 10) / 10,
+                valueLabel: `${fmtScore(Math.round(m.best * 10) / 10)} (média ${fmtScore(Math.round(m.avg * 10) / 10)})`,
+                tone: m.best >= 80 ? "primary" : m.best >= 60 ? "warning" : "danger",
+              }))}
+            />
           )}
-          <p style={{ fontSize: theme.font.size.sm, color: theme.color.text, margin: "12px 0 0" }}>
+          <p style={{ fontSize: theme.font.size.sm, color: theme.color.text, margin: "14px 0 0" }}>
             <b>Pontos fortes:</b> {analysis.strengths.length > 0 ? analysis.strengths.map((m) => m.module_nome).join(" · ") : "—"}
             <br />
             <b>A desenvolver:</b> {analysis.weaknesses.length > 0 ? analysis.weaknesses.map((m) => m.module_nome).join(" · ") : "—"}
           </p>
-        </div>
+        </Collapsible>
 
         {analysis.areas.length > 0 && (
-          <div style={boxStyle}>
-            <h2 style={h2}>Fases de área (afinidade)</h2>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 520 }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${theme.color.border}` }}>
-                    <th style={th}>Área</th>
-                    <th style={th}>Módulos</th>
-                    <th style={th}>Nota (melhor)</th>
-                    <th style={th}>Nota (média)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {analysis.areas.map((a) => (
-                    <tr key={a.area_key} style={{ borderTop: `1px solid ${theme.color.border}` }}>
-                      <td style={{ ...td, fontWeight: 600 }}>{a.area_label}</td>
-                      <td style={td}>{a.modules.map((m) => m.module_nome).join(" · ")}</td>
-                      <td style={td}>{fmtScore(a.best)}</td>
-                      <td style={td}>{fmtScore(a.avg)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <Collapsible title="Fases de área (afinidade)" summary={`${analysis.areas.length} área${analysis.areas.length === 1 ? "" : "s"}`}>
+            <p style={hint}>Nota do candidato em cada área de vaga (melhor tentativa; o traço cinza é a média).</p>
+            <HBars
+              labelWidth={200}
+              rows={analysis.areas.map((a) => ({
+                key: a.area_key,
+                label: a.area_label,
+                value: a.best,
+                marker2: a.avg,
+                valueLabel: `${fmtScore(a.best)} (média ${fmtScore(a.avg)})`,
+                tone: (a.best ?? 0) >= 80 ? "primary" : (a.best ?? 0) >= 60 ? "warning" : "danger",
+              }))}
+            />
+          </Collapsible>
         )}
 
-        <div style={boxStyle}>
-          <h2 style={h2}>Histórico de avaliações (fotografias)</h2>
-          <p style={{ fontSize: theme.font.size.xs, color: theme.color.textMuted, margin: "0 0 10px" }}>
+        <Collapsible
+          title="Respostas questão a questão"
+          summary={`${totalAttempts} tentativa${totalAttempts === 1 ? "" : "s"} em ${detail.moduleAttempts.length} módulo${detail.moduleAttempts.length === 1 ? "" : "s"}`}
+        >
+          <p style={hint}>Abra um módulo, depois uma tentativa, para ver o que o candidato marcou em cada questão e qual era a resposta certa.</p>
+          {detail.moduleAttempts.length === 0 ? (
+            <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: 0 }}>Nenhuma tentativa registrada ainda.</p>
+          ) : (
+            detail.moduleAttempts.map((m) => (
+              <Collapsible
+                key={m.moduleId}
+                nested
+                title={
+                  <>
+                    {m.moduleNome} <span style={{ fontWeight: 400, color: theme.color.textFaint }}>· {m.areaLabel}</span>
+                  </>
+                }
+                summary={`${m.attempts.length} tentativa${m.attempts.length === 1 ? "" : "s"} · melhor ${fmtScore(Math.max(...m.attempts.map((a) => a.score)))}`}
+              >
+                {m.attempts.map((a, idx) => (
+                  <Collapsible
+                    key={a.attemptId}
+                    nested
+                    title={`${idx === 0 ? "Última tentativa" : `Tentativa de ${formatDate(a.submittedAt)}`}`}
+                    summary={`${formatDate(a.submittedAt)} · ${a.correctAnswers}/${a.totalQuestions} acertos · nota ${fmtScore(a.score)}`}
+                  >
+                    {a.questions.length === 0 ? (
+                      <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: 0 }}>Sem detalhe das questões nesta tentativa.</p>
+                    ) : (
+                      a.questions.map((q, i) => (
+                        <div
+                          key={q.id || i}
+                          style={{
+                            padding: 10,
+                            borderRadius: theme.radius.md,
+                            background: q.correct ? theme.color.primaryLight : theme.color.dangerBg,
+                            marginBottom: 6,
+                          }}
+                        >
+                          <div style={{ fontSize: 13, fontWeight: 600, color: theme.color.text }}>
+                            {i + 1}. {q.pergunta}
+                          </div>
+                          <div style={{ fontSize: 13, marginTop: 4, color: theme.color.text }}>
+                            <span style={{ fontWeight: 700, color: q.correct ? theme.color.primaryDark : theme.color.danger }}>
+                              {q.correct ? "✓ Acertou" : "✗ Errou"}
+                            </span>{" "}
+                            — marcou: <b>{q.chosenText ?? "(em branco)"}</b>
+                            {!q.correct && (
+                              <>
+                                {" "}
+                                · certa: <b>{q.correctText}</b>
+                              </>
+                            )}
+                          </div>
+                          {q.explicacao && !q.correct && (
+                            <div style={{ fontSize: 12, color: theme.color.textMuted, marginTop: 4 }}>{q.explicacao}</div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </Collapsible>
+                ))}
+              </Collapsible>
+            ))
+          )}
+        </Collapsible>
+
+        <Collapsible
+          title="Histórico de avaliações (fotografias)"
+          summary={detail.history.length > 0 ? `${detail.history.length} registro${detail.history.length === 1 ? "" : "s"}` : "nenhuma ainda"}
+        >
+          <p style={hint}>
             Cada linha guarda as vagas e os cortes vigentes na data — continua verdadeira mesmo que a trilha ou os cortes mudem depois.
           </p>
           {detail.history.length === 0 ? (
@@ -221,14 +297,14 @@ export default async function CandidatoRecrutamentoPage({ params }: { params: { 
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
                   {h.payload.fits.map((f) => (
                     <Badge key={f.vacancyId} tone={fitTone[f.best]}>
-                      {f.nome} (corte {fmtScore(f.logicCutoff)}): {fitLabel[f.best]}
+                      {f.nome} (mín. {fmtScore(f.logicCutoff)}): {fitLabel[f.best]}
                     </Badge>
                   ))}
                 </div>
               </div>
             ))
           )}
-        </div>
+        </Collapsible>
       </Container>
     </PageShell>
   );

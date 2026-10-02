@@ -591,3 +591,10 @@ Em `/admin/estrutura`, cada módulo agora tem os botões **Material** e **Pergun
 - **Perguntas** abre ali mesmo o editor visual de perguntas do módulo (criar, editar, validar e salvar o `perguntas.json` no Drive).
 - Ao **criar um módulo**, o painel de Material já abre sozinho para enviar o arquivo.
 - As telas separadas "Conteúdo dos módulos" (`/admin/conteudo`) e "Editor de Perguntas" (`/admin/perguntas`) saíram do painel; os endereços antigos redirecionam para a Estrutura. As rotas de API (`/api/admin/conteudo/*`, `/api/admin/perguntas/*`) continuam as mesmas.
+
+### Indicadores em dropdown e com gráficos
+
+- **Componentes novos:** `src/components/ui/Collapsible.tsx` (seção em dropdown, com resumo sempre visível no cabeçalho) e `src/components/ui/Charts.tsx` (barras de nota com marcador do mínimo, barras empilhadas, colunas/histograma — CSS puro, sem dependência).
+- **Indicadores (visão geral):** cada bloco é um dropdown; colaboradores mostram a conclusão em barras, módulos a nota média com o traço da nota mínima de aprovação (70) e as perguntas mais erradas o % de erro.
+- **Recrutamento Interno:** cartão de candidatos com **quantos têm interesse em cada vaga**; dropdowns "Interesse × aptidão por vaga", "Encaixe por vaga" (barras atinge/quase/abaixo), "Distribuição das notas" (histograma) e "Candidatos" — tabela com **uma coluna de nota por área** (lógica, Compras, RC...), melhor tentativa em destaque e média embaixo.
+- **Detalhe do candidato:** cada vaga mostra "**tirou X de mínimo Y**" com barra e traço do corte (e quanto falta); habilidades e áreas em barras (traço cinza = média); e **respostas questão a questão** (módulo -> tentativa -> cada pergunta com o que marcou, a certa e a explicação), montadas do snapshot gravado em cada tentativa.

@@ -3,6 +3,7 @@ import type { RecruitmentResult, Vacancy } from "@/lib/db/types";
 import { listUsersWithTrack, getUserById } from "@/lib/repositories/usersRepository";
 import { listActiveEnrollmentsForUsers } from "@/lib/repositories/enrollmentsRepository";
 import { listAllModules } from "@/lib/repositories/modulesRepository";
+import { listAttemptsForUser } from "@/lib/repositories/quizAttemptsRepository";
 import { listAllPhases } from "@/lib/repositories/phasesRepository";
 import {
   getRecruitmentProgramId,
@@ -79,6 +80,8 @@ export interface CandidateRow {
   bestPossibility: string | null;
   alertNames: string[];
   fitByVacancy: Record<string, FitStatus>; // visão melhor tentativa
+  /** Nota por área (chave 'logica' + áreas de vaga), nas duas leituras. */
+  areaScores: Record<string, { best: number | null; avg: number | null }>;
 }
 
 export interface VacancyTally {
@@ -88,8 +91,16 @@ export interface VacancyTally {
   avg: Record<FitStatus, number>;
 }
 
+export interface InterestSummary {
+  perVacancy: Array<{ id: string; nome: string; interested: number; interestedMeeting: number }>;
+  none: number;
+}
+
 export interface RecruitmentReport {
   configured: boolean;
+  /** Áreas com fase etiquetada (lógica primeiro) — viram colunas da tabela de candidatos. */
+  areas: Array<{ key: string; label: string }>;
+  interestSummary: InterestSummary;
   vacancies: Array<{ id: string; nome: string }>;
   candidates: CandidateRow[];
   totals: { candidates: number; completed: number; avgBestScore: number | null; avgAvgScore: number | null };
@@ -101,7 +112,15 @@ const emptyTally = (): Record<FitStatus, number> => ({ atinge: 0, quase: 0, abai
 export async function getRecruitmentReport(): Promise<RecruitmentReport> {
   const programId = await getRecruitmentProgramId();
   if (!programId) {
-    return { configured: false, vacancies: [], candidates: [], totals: { candidates: 0, completed: 0, avgBestScore: null, avgAvgScore: null }, tallies: [] };
+    return {
+      configured: false,
+      areas: [],
+      interestSummary: { perVacancy: [], none: 0 },
+      vacancies: [],
+      candidates: [],
+      totals: { candidates: 0, completed: 0, avgBestScore: null, avgAvgScore: null },
+      tallies: [],
+    };
   }
 
   const [users, vacancies, allResults] = await Promise.all([
@@ -113,10 +132,22 @@ export async function getRecruitmentReport(): Promise<RecruitmentReport> {
   const enrollmentsByUser = await listActiveEnrollmentsForUsers(students.map((u) => u.id));
   const candidates = students.filter((u) => (enrollmentsByUser.get(u.id) ?? []).some((e) => e.program_id === programId));
 
-  const [expected, interestsByUser] = await Promise.all([
+  const [expected, interestsByUser, phaseAreas, phases] = await Promise.all([
     countExpectedLogicModules(programId),
     listInterestsForUsers(candidates.map((c) => c.id)),
+    listPhaseAreas(),
+    listAllPhases(),
   ]);
+
+  // Áreas do Programa de Recrutamento (fases ativas etiquetadas) — lógica primeiro.
+  const programPhaseIds = new Set(phases.filter((p) => p.active && p.program_id === programId).map((p) => p.id));
+  const areaMap = new Map<string, string>();
+  for (const a of phaseAreas) {
+    if (programPhaseIds.has(a.phase_id) && !areaMap.has(a.area_key)) areaMap.set(a.area_key, a.area_label);
+  }
+  const areas = [...areaMap.entries()]
+    .map(([key, label]) => ({ key, label }))
+    .sort((a, b) => (a.key === LOGIC_AREA ? -1 : b.key === LOGIC_AREA ? 1 : a.label.localeCompare(b.label, "pt-BR")));
 
   const resultsByUser = new Map<string, RecruitmentResult[]>();
   for (const r of allResults) {
@@ -146,12 +177,17 @@ export async function getRecruitmentReport(): Promise<RecruitmentReport> {
       }
     }
 
+    const areaScores: CandidateRow["areaScores"] = {};
+    if (analysis.logic) areaScores[LOGIC_AREA] = { best: analysis.logic.best, avg: analysis.logic.avg };
+    for (const a of analysis.areas) areaScores[a.area_key] = { best: a.best, avg: a.avg };
+
     return {
       userId: u.id,
       nome: u.nome_completo,
       matricula: u.matricula,
       cd: u.cd,
       turno: u.turno,
+      areaScores,
       interestNames: interests.map((i) => i.vacancy_nome),
       logicDone: analysis.logicModulesDone,
       logicExpected: analysis.logicModulesExpected,
@@ -170,8 +206,24 @@ export async function getRecruitmentReport(): Promise<RecruitmentReport> {
     return nums.length === 0 ? null : Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 10) / 10;
   };
 
+  // Quantos candidatos têm interesse em cada vaga, e quantos desses já atingem o corte (melhor tentativa).
+  const interestSummary: InterestSummary = {
+    perVacancy: vacancies.map((v) => {
+      const interested = candidates.filter((c) => (interestsByUser.get(c.id) ?? []).some((i) => i.vacancy_id === v.id));
+      return {
+        id: v.id,
+        nome: v.nome,
+        interested: interested.length,
+        interestedMeeting: interested.filter((c) => rows.find((r) => r.userId === c.id)?.fitByVacancy[v.id] === "atinge").length,
+      };
+    }),
+    none: candidates.filter((c) => (interestsByUser.get(c.id) ?? []).length === 0).length,
+  };
+
   return {
     configured: true,
+    areas,
+    interestSummary,
     vacancies: vacancies.map((v) => ({ id: v.id, nome: v.nome })),
     candidates: rows,
     totals: {
@@ -186,6 +238,30 @@ export async function getRecruitmentReport(): Promise<RecruitmentReport> {
 
 /* -------------------------------- detalhe -------------------------------- */
 
+export interface QuestionBreakdown {
+  id: string;
+  pergunta: string;
+  chosenText: string | null;
+  correctText: string;
+  correct: boolean;
+  explicacao: string | null;
+}
+export interface AttemptBreakdown {
+  attemptId: string;
+  submittedAt: string;
+  score: number;
+  correctAnswers: number;
+  totalQuestions: number;
+  questions: QuestionBreakdown[];
+}
+export interface ModuleAttempts {
+  moduleId: string;
+  moduleNome: string;
+  areaKey: string;
+  areaLabel: string;
+  attempts: AttemptBreakdown[]; // da mais recente para a mais antiga
+}
+
 export interface CandidateDetail {
   userId: string;
   nome: string;
@@ -195,6 +271,7 @@ export interface CandidateDetail {
   analysis: Analysis;
   interests: Array<{ vacancyId: string; nome: string; active: boolean }>;
   alertVacancyIds: string[];
+  moduleAttempts: ModuleAttempts[];
   history: Array<{ id: string; generatedAt: string; payload: AssessmentPayload }>;
 }
 
@@ -212,6 +289,7 @@ export async function getCandidateDetail(userId: string): Promise<CandidateDetai
 
   const analysis = analyzeCandidate(results.map(toAnalysisResult), vacancies.map(toAnalysisVacancy), expected);
   const activeIds = new Set(vacancies.map((v) => v.id));
+  const moduleAttempts = await buildModuleAttempts(userId, results);
 
   return {
     userId,
@@ -222,8 +300,67 @@ export async function getCandidateDetail(userId: string): Promise<CandidateDetai
     analysis,
     interests: interests.map((i) => ({ vacancyId: i.vacancy_id, nome: i.vacancy_nome, active: activeIds.has(i.vacancy_id) })),
     alertVacancyIds: interestAlerts(analysis, interests.map((i) => i.vacancy_id)).map((a) => a.vacancy.id),
+    moduleAttempts,
     history: assessments.map((a) => ({ id: a.id, generatedAt: a.generated_at, payload: a.payload as unknown as AssessmentPayload })),
   };
+}
+
+/** Monta, por módulo, cada tentativa com o resultado de CADA questão (a partir do snapshot gravado na tentativa). */
+async function buildModuleAttempts(userId: string, results: RecruitmentResult[]): Promise<ModuleAttempts[]> {
+  const attempts = await listAttemptsForUser(userId);
+  const attemptById = new Map(attempts.map((a) => [a.id, a]));
+
+  const byModule = new Map<string, ModuleAttempts>();
+  for (const r of results) {
+    const attempt = attemptById.get(r.attempt_id);
+    if (!attempt) continue;
+
+    const snapshot = (attempt.questions_snapshot as { perguntas?: unknown })?.perguntas;
+    const answers = (attempt.answers as { answers?: unknown })?.answers;
+    const perguntas = Array.isArray(snapshot) ? (snapshot as Array<Record<string, unknown>>) : [];
+    const answerList = Array.isArray(answers) ? (answers as Array<{ questionId?: string; alternativaId?: string }>) : [];
+
+    const questions: QuestionBreakdown[] = perguntas.map((p) => {
+      const alternativas = Array.isArray(p.alternativas) ? (p.alternativas as Array<{ id: string; texto: string }>) : [];
+      const textOf = (altId: string | null | undefined) => alternativas.find((a) => a.id === altId)?.texto ?? null;
+      const chosenId = answerList.find((a) => a.questionId === p.id)?.alternativaId ?? null;
+      const correctId = String(p.correta ?? "");
+      return {
+        id: String(p.id ?? ""),
+        pergunta: String(p.pergunta ?? ""),
+        chosenText: chosenId ? textOf(chosenId) : null,
+        correctText: textOf(correctId) ?? correctId,
+        correct: chosenId !== null && chosenId === correctId,
+        explicacao: typeof p.explicacao === "string" ? p.explicacao : null,
+      };
+    });
+
+    const entry = byModule.get(r.module_id) ?? {
+      moduleId: r.module_id,
+      moduleNome: r.module_nome,
+      areaKey: r.area_key,
+      areaLabel: r.area_label,
+      attempts: [],
+    };
+    entry.attempts.push({
+      attemptId: attempt.id,
+      submittedAt: r.submitted_at,
+      score: r.score,
+      correctAnswers: r.correct_answers,
+      totalQuestions: r.total_questions,
+      questions,
+    });
+    byModule.set(r.module_id, entry);
+  }
+
+  const list = [...byModule.values()];
+  for (const m of list) m.attempts.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+  return list.sort((a, b) => {
+    if (a.areaKey !== b.areaKey) {
+      return a.areaKey === LOGIC_AREA ? -1 : b.areaKey === LOGIC_AREA ? 1 : a.areaLabel.localeCompare(b.areaLabel, "pt-BR");
+    }
+    return a.moduleNome.localeCompare(b.moduleNome, "pt-BR", { numeric: true });
+  });
 }
 
 /* ------------------------ fotografia da avaliação ------------------------ */
