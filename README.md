@@ -563,3 +563,15 @@ Em `/admin/estrutura` o gestor cria, renomeia e remove **Programas, Fases, Funç
 - **Renomear** muda a pasta do Drive e a linha do banco (senão a próxima sincronização reverteria). Em módulo que já tem material, o nome exibido continua sendo o título do material (edite em Conteúdo).
 - **Remover** manda a pasta para a **lixeira do Drive** (reversível) e desativa o item e tudo que está dentro (soft-delete, nada é apagado do banco). Alunos matriculados num Programa removido perdem o acesso. Reordenar fica para uma próxima rodada.
 - Se o banco falhar logo depois de criar a pasta, a pasta é descartada automaticamente (sem pasta órfã).
+
+## Recrutamento Interno — diagnóstico de aptidão por vaga (Etapa A: base)
+
+A trilha de Recrutamento Interno mede o desempenho dos candidatos (teste de lógica + fases de área) para direcionar cada um à vaga com melhor encaixe. **A trilha muda com o tempo** (módulos de uma área hoje, de outra depois), então o que é gravado não depende da estrutura atual.
+
+- **Migration:** `supabase/migrations/0012_recruitment.sql` (7 tabelas novas, com GRANT a `service_role`). Rode no SQL Editor.
+- **Configuração** (`/admin/recrutamento`, só admin): escolher o Programa de Recrutamento; **etiquetar cada fase** com sua área (`Teste de lógica` ou uma área livre como RC/Logística — a chave da área é estável, derivada do nome); cadastrar **vagas** com nota de corte de lógica e (opcional) área de afinidade + corte da área. Vaga encerrada é desativada, nunca apagada.
+- **Dados à prova de mudança:** cada tentativa de quiz de uma fase etiquetada grava um `recruitment_results` com a área e os **nomes de módulo/fase da época**; ao etiquetar uma fase, as tentativas já existentes entram (idempotente por `attempt_id`). O interesse do candidato guarda o nome da vaga no momento. As vagas se ligam à **área**, não a módulo/fase.
+- **Liberação no diagnóstico:** nos módulos do Programa de Recrutamento o quiz libera o próximo módulo ao ser enviado, aprovado ou não (a regra de 70% travaria quem reprova cedo). A tela de resultado mostra "Tentar novamente" **e** "Próximo módulo".
+- **Interesse:** ao entrar na trilha de Recrutamento o candidato escolhe a(s) vaga(s) de interesse (ou "ainda não sei"); pode alterar pelo link na home.
+- **Resiliência:** se a migration ainda não foi aplicada, nada quebra para o aluno (as leituras de recrutamento degradam em silêncio).
+- Próximas etapas: relatório do gestor em Indicadores e resumo do colaborador.

@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
+import { getInterestState } from "@/lib/services/recruitmentService";
 import { getCurrentSession } from "@/lib/auth/getSession";
 import { canAccessAdminHub, isFullAccessRole } from "@/lib/auth/roles";
 import { getUserById } from "@/lib/repositories/usersRepository";
@@ -39,6 +41,11 @@ export default async function AppHomePage() {
   const { programId, trackId } = active.enrollment;
   const viewOnly = active.fullAccess;
 
+  // Trilha de Recrutamento Interno: antes de começar, o candidato diz quais
+  // vagas lhe interessam (uma vez; depois pode alterar pelo link abaixo).
+  const interest = viewOnly ? null : await getInterestState(user.id, programId);
+  if (interest?.needsAnswer) redirect("/app/recrutamento/interesse");
+
   // Fase 7: garante (de forma idempotente) que o primeiro módulo da
   // trilha deste usuário já está persistido como liberado, antes de ler
   // o estado para exibição. Perfis sem travas não gravam nada.
@@ -54,6 +61,14 @@ export default async function AppHomePage() {
         trocarTrilhaHref={active.hasMultiple ? "/api/app/trocar-trilha" : undefined}
       />
       <Container maxWidth={560}>
+        {interest?.isRecruitment && (
+          <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: "0 0 12px" }}>
+            Vagas de interesse: <b>{interest.names.length > 0 ? interest.names.join(", ") : "ainda não definidas"}</b>{" "}
+            <Link href="/app/recrutamento/interesse" style={{ color: theme.color.primaryDark, fontWeight: 600 }}>
+              alterar
+            </Link>
+          </p>
+        )}
         <TrilhaAccordion
           trilha={trilha}
           nome={user.nome_completo}

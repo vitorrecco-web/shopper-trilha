@@ -8,6 +8,7 @@ import { fetchAndValidateQuiz, toPublicQuiz, gradeSubmission } from "@/lib/quiz/
 import { recordQuizAttempt } from "@/lib/repositories/quizAttemptsRepository";
 import { markPassedAndMaybeUpdateBestScore } from "@/lib/repositories/userModulesRepository";
 import { unlockNextModule } from "@/lib/services/progressionService";
+import { onQuizAttemptRecorded, isRecruitmentModule } from "@/lib/services/recruitmentService";
 
 /**
  * Fase 9. Autorização compartilhada pelo GET (buscar perguntas) e pelo
@@ -100,10 +101,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   // Modo visualização (perfis sem travas): corrige e mostra o resultado,
   // mas NÃO grava tentativa nem progresso — não polui indicadores.
+  // Recrutamento Interno: diagnóstico — o próximo módulo abre ao ENVIAR o
+  // quiz, aprovado ou não (a regra de 70% travaria quem reprova cedo e a
+  // análise ficaria incompleta).
+  let isRecruitment = false;
+
   if (!viewOnly) {
     // Tarefa 9: registra a tentativa com snapshot completo — histórico
     // nunca é sobrescrito, mesmo que essa tentativa seja reprovada.
-    await recordQuizAttempt({
+    const attempt = await recordQuizAttempt({
       user_id: user.id,
       module_id: access.module.id,
       score: result.score,
@@ -114,15 +120,24 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       questions_snapshot: { perguntas: validated.perguntas },
     });
 
+    // Grava o resultado já com a área/nomes da época (não derruba o envio se falhar).
+    isRecruitment = (await onQuizAttemptRecorded(attempt, access.module)).isRecruitment;
+
     // Tarefas 10-11: só em caso de aprovação — nunca em reprovação, o que
     // já garante "nova tentativa não remove aprovação anterior" e "nota
     // menor não substitui a melhor nota" (a própria função do repositório
     // só aumenta best_score e nunca desmarca completed).
     if (result.passed) {
       await markPassedAndMaybeUpdateBestScore(user.id, access.module.id, result.score);
+    }
+    if (result.passed || isRecruitment) {
       await unlockNextModule(user.id, programId, trackId, access.module.id);
     }
+  } else {
+    isRecruitment = await isRecruitmentModule(access.module);
   }
+
+  const canAdvance = result.passed || isRecruitment;
 
   return NextResponse.json({
     ok: true,
@@ -135,7 +150,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       correct: r.correct,
       explicacao: r.explicacao,
     })),
-    nextModuleId: result.passed ? access.nextModuleId : null,
-    nextModuleNome: result.passed ? access.nextModuleNome : null,
+    nextModuleId: canAdvance ? access.nextModuleId : null,
+    nextModuleNome: canAdvance ? access.nextModuleNome : null,
+    canAdvance,
   });
 }

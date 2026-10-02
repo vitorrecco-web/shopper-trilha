@@ -43,6 +43,8 @@ interface SubmitResult {
   perQuestion: PerQuestionResult[];
   nextModuleId: string | null;
   nextModuleNome: string | null;
+  /** Recrutamento Interno: o próximo módulo abre mesmo reprovando. */
+  canAdvance?: boolean;
   error?: string;
 }
 
@@ -232,18 +234,20 @@ export function QuizClient({
           <Button variant="secondary" onClick={() => setReviewing((r) => !r)}>
             {reviewing ? "Ocultar revisão" : "Revisar respostas"}
           </Button>
-          {result.passed ? (
-            result.nextModuleId ? (
-              <Link href={`/app/modulo/${result.nextModuleId}`} style={buttonStyle("primary")}>
-                Ir para o próximo módulo: {result.nextModuleNome} →
-              </Link>
-            ) : (
+          {!result.passed && <Button onClick={loadQuiz}>Tentar novamente</Button>}
+          {result.nextModuleId ? (
+            <Link
+              href={`/app/modulo/${result.nextModuleId}`}
+              style={buttonStyle(result.passed ? "primary" : "secondary")}
+            >
+              Ir para o próximo módulo: {result.nextModuleNome} →
+            </Link>
+          ) : (
+            result.passed && (
               <span style={{ fontSize: 13, color: theme.color.textMuted }}>
                 Você concluiu o último módulo disponível até agora. 🎉
               </span>
             )
-          ) : (
-            <Button onClick={loadQuiz}>Tentar novamente</Button>
           )}
         </div>
 

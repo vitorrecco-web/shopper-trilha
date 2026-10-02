@@ -160,3 +160,54 @@ export interface SyncChange {
   new_value: Record<string, unknown> | null;
   created_at: string;
 }
+
+/* Recrutamento Interno (migration 0012) */
+
+export interface RecruitmentSettings {
+  id: 1;
+  program_id: string | null;
+  updated_at: string;
+}
+
+export interface RecruitmentPhaseArea {
+  phase_id: string;
+  area_key: string;
+  area_label: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Vacancy {
+  id: string;
+  nome: string;
+  logic_cutoff: number;
+  area_key: string | null;
+  area_cutoff: number | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CandidateInterest {
+  id: string;
+  user_id: string;
+  vacancy_id: string;
+  vacancy_nome: string;
+  created_at: string;
+}
+
+export interface RecruitmentResult {
+  id: string;
+  attempt_id: string;
+  user_id: string;
+  area_key: string;
+  area_label: string;
+  module_id: string;
+  module_nome: string;
+  phase_id: string | null;
+  phase_nome: string;
+  score: number;
+  correct_answers: number;
+  total_questions: number;
+  submitted_at: string;
+}

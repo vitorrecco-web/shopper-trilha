@@ -51,6 +51,12 @@ const cards: HubCard[] = [
     adminOnly: true,
   },
   {
+    href: "/admin/recrutamento",
+    title: "Recrutamento: vagas e áreas",
+    description: "Configurar o Programa de Recrutamento, a área de cada fase e as vagas com nota de corte",
+    adminOnly: true,
+  },
+  {
     href: "/admin/indicadores",
     title: "Indicadores",
     description: "Conclusão média, desempenho por módulo e perguntas mais erradas",
