@@ -313,3 +313,16 @@ export async function streamDriveFile(fileId: string): Promise<{ stream: Readabl
   const len = res.headers?.["content-length"];
   return { stream: res.data as unknown as Readable, size: len ? Number(len) : null };
 }
+
+/** Cria uma pasta dentro de outra (Admin > Estrutura). Devolve o id da pasta. */
+export async function createDriveFolder(parentFolderId: string, name: string): Promise<string> {
+  const auth = getAuth();
+  const drive = google.drive({ version: "v3", auth });
+  const res = await drive.files.create({
+    requestBody: { name, parents: [parentFolderId], mimeType: "application/vnd.google-apps.folder" },
+    fields: "id",
+    supportsAllDrives: true,
+  });
+  if (!res.data.id) throw new Error("O Drive não devolveu o id da pasta recém-criada.");
+  return res.data.id;
+}

@@ -170,3 +170,25 @@ export async function setModuleMaterial(id: string, input: ModuleMaterialInput):
   const { error } = await supabase.from("modules").update(patch).eq("id", id);
   if (error) throw error;
 }
+
+export async function renameModule(id: string, nome: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from("modules").update({ nome }).eq("id", id);
+  if (error) throw error;
+}
+
+/** Soft-delete dos módulos de várias fases (remoção de Fase/Programa) — nunca apaga fisicamente (§7.2). */
+export async function deactivateModulesByPhaseIds(phaseIds: string[]): Promise<void> {
+  if (phaseIds.length === 0) return;
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from("modules").update({ active: false }).in("phase_id", phaseIds);
+  if (error) throw error;
+}
+
+/** Soft-delete dos módulos de uma ou mais Funções (remoção de Função). */
+export async function deactivateModulesByTrackIds(trackIds: string[]): Promise<void> {
+  if (trackIds.length === 0) return;
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from("modules").update({ active: false }).in("track_id", trackIds);
+  if (error) throw error;
+}

@@ -79,3 +79,10 @@ export async function deactivateProgram(id: string): Promise<void> {
   const { error } = await supabase.from("programs").update({ active: false }).eq("id", id);
   if (error) throw error;
 }
+
+/** Admin > Estrutura: renomeia só a linha (a pasta do Drive é renomeada junto por quem chama). */
+export async function renameProgram(id: string, nome: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from("programs").update({ nome }).eq("id", id);
+  if (error) throw error;
+}

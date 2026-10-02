@@ -80,3 +80,16 @@ export async function deactivatePhase(id: string): Promise<void> {
   const { error } = await supabase.from("phases").update({ active: false }).eq("id", id);
   if (error) throw error;
 }
+
+export async function renamePhase(id: string, nome: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from("phases").update({ nome }).eq("id", id);
+  if (error) throw error;
+}
+
+/** Soft-delete de todas as fases de um Programa (remoção do Programa inteiro). */
+export async function deactivatePhasesOfProgram(programId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from("phases").update({ active: false }).eq("program_id", programId);
+  if (error) throw error;
+}

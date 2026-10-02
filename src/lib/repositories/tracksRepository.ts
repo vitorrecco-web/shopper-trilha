@@ -92,3 +92,16 @@ export async function deactivateTrack(id: string): Promise<void> {
   const { error } = await supabase.from("tracks").update({ active: false }).eq("id", id);
   if (error) throw error;
 }
+
+export async function renameTrack(id: string, nome: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from("tracks").update({ nome }).eq("id", id);
+  if (error) throw error;
+}
+
+/** Soft-delete de todas as Funções de um Programa (remoção do Programa inteiro). */
+export async function deactivateTracksOfProgram(programId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from("tracks").update({ active: false }).eq("program_id", programId);
+  if (error) throw error;
+}

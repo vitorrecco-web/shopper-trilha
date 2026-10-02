@@ -552,3 +552,14 @@ Em `/admin/conteudo` o gestor adiciona ou troca o material principal de um módu
 - Se a conversão do PowerPoint falhar (apresentação muito grande para o limite de ~10 MB de exportação do Drive), salve como PDF pelo PowerPoint e envie o PDF.
 - O PDF para o aluno agora é servido **em stream** (`api/modulos/[id]/pdf`), então PDFs maiores que 4,5 MB funcionam.
 - Exige `GOOGLE_OAUTH_REFRESH_TOKEN` com o escopo `https://www.googleapis.com/auth/drive` (leitura e escrita).
+
+## Estrutura das trilhas pelo app (Admin > Estrutura das trilhas)
+
+Em `/admin/estrutura` o gestor cria, renomeia e remove **Programas, Fases, Funções e Módulos** sem montar pastas no Drive à mão:
+
+- Cada criação faz **a pasta no Drive e a linha no banco juntas**, com os nomes que a sincronização espera: `Fase N - assunto` (N = próxima ordem livre do Programa), `Módulo N - título` (N = próxima ordem dentro da fase/Função), Função = subpasta da fase, Programa = pasta sob `GOOGLE_DRIVE_ROOT_FOLDER_ID`. Depois de criar, "Analisar alterações" não mostra diferença (validado com Programa de teste).
+- **Regra de fase:** uma fase tem módulos diretos (comum) **ou** Funções (por função), nunca os dois — a primeira Função criada transforma a fase em "por função".
+- Módulo novo nasce **sem material**: adicione o PDF/PowerPoint/YouTube em **Conteúdo dos módulos** (o botão "Conteúdo" do módulo leva até lá).
+- **Renomear** muda a pasta do Drive e a linha do banco (senão a próxima sincronização reverteria). Em módulo que já tem material, o nome exibido continua sendo o título do material (edite em Conteúdo).
+- **Remover** manda a pasta para a **lixeira do Drive** (reversível) e desativa o item e tudo que está dentro (soft-delete, nada é apagado do banco). Alunos matriculados num Programa removido perdem o acesso. Reordenar fica para uma próxima rodada.
+- Se o banco falhar logo depois de criar a pasta, a pasta é descartada automaticamente (sem pasta órfã).

@@ -39,6 +39,12 @@ const cards: HubCard[] = [
     adminOnly: true,
   },
   {
+    href: "/admin/estrutura",
+    title: "Estrutura das trilhas",
+    description: "Criar e organizar Programas, Fases, Funções e Módulos direto pelo app",
+    adminOnly: true,
+  },
+  {
     href: "/admin/conteudo",
     title: "Conteúdo dos módulos",
     description: "Adicionar ou trocar o PDF, a apresentação PowerPoint ou o vídeo do YouTube de cada módulo",
