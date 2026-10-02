@@ -50,6 +50,10 @@ interface SalvarResult {
 }
 
 const ALT_IDS = ["a", "b", "c", "d"] as const;
+/** Mesmos limites de validatePerguntas.ts (2 a 8 alternativas por pergunta) — o pool de letras cobre até o máximo. */
+const ALT_ID_POOL = "abcdefghijklmnopqrstuvwxyz".split("");
+const MIN_ALTERNATIVAS = 2;
+const MAX_ALTERNATIVAS = 8;
 
 interface EditorAlternativa {
   id: string;
@@ -88,12 +92,18 @@ function asString(value: unknown, fallback = ""): string {
 
 function normalizePergunta(raw: unknown, index: number): EditorPergunta {
   const p = (raw ?? {}) as Record<string, unknown>;
-  const rawAlts = Array.isArray(p.alternativas) ? (p.alternativas as Record<string, unknown>[]) : [];
+  const rawAlts: Record<string, unknown>[] =
+    Array.isArray(p.alternativas) && p.alternativas.length > 0
+      ? (p.alternativas as Record<string, unknown>[])
+      : ALT_IDS.map(() => ({}) as Record<string, unknown>);
 
-  const alternativas: EditorAlternativa[] = ALT_IDS.map((id, i) => ({
-    id: asString(rawAlts[i]?.id, id) || id,
-    texto: asString(rawAlts[i]?.texto),
-  }));
+  const alternativas: EditorAlternativa[] = rawAlts.map((a, i) => {
+    const fallbackId = ALT_ID_POOL[i] ?? `alt${i + 1}`;
+    return {
+      id: asString(a?.id, fallbackId) || fallbackId,
+      texto: asString(a?.texto),
+    };
+  });
 
   const correta = asString(p.correta, alternativas[0]?.id ?? "a");
 
@@ -126,6 +136,14 @@ function nextQuestionId(perguntas: EditorPergunta[]): string {
     candidate = `q${i}`;
   }
   return candidate;
+}
+
+function nextAltId(alternativas: EditorAlternativa[]): string {
+  const existing = new Set(alternativas.map((a) => a.id));
+  for (const id of ALT_ID_POOL) {
+    if (!existing.has(id)) return id;
+  }
+  return `alt${alternativas.length + 1}`;
 }
 
 function newQuestion(perguntas: EditorPergunta[]): EditorPergunta {
@@ -387,6 +405,31 @@ export function PerguntasEditorPanel() {
                 }
               : p
           )
+        : prev
+    );
+  }
+
+  function handleAddAlternativa(questionKey: string) {
+    setPerguntas((prev) =>
+      prev
+        ? prev.map((p) => {
+            if (p.key !== questionKey || p.alternativas.length >= MAX_ALTERNATIVAS) return p;
+            return { ...p, alternativas: [...p.alternativas, { id: nextAltId(p.alternativas), texto: "" }] };
+          })
+        : prev
+    );
+  }
+
+  function handleRemoveAlternativa(questionKey: string, altIndex: number) {
+    setPerguntas((prev) =>
+      prev
+        ? prev.map((p) => {
+            if (p.key !== questionKey || p.alternativas.length <= MIN_ALTERNATIVAS) return p;
+            const removed = p.alternativas[altIndex];
+            const alternativas = p.alternativas.filter((_, i) => i !== altIndex);
+            const correta = removed?.id === p.correta ? (alternativas[0]?.id ?? "a") : p.correta;
+            return { ...p, alternativas, correta };
+          })
         : prev
     );
   }
@@ -716,8 +759,10 @@ export function PerguntasEditorPanel() {
                   style={{ ...inputStyle, marginBottom: 12, resize: "vertical" }}
                 />
 
-                <label style={labelStyle}>Alternativas (selecione a correta)</label>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                <label style={labelStyle}>
+                  Alternativas (selecione a correta) — {p.alternativas.length} de {MAX_ALTERNATIVAS}
+                </label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
                   {p.alternativas.map((alt, altIndex) => (
                     <div key={alt.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <input
@@ -736,9 +781,40 @@ export function PerguntasEditorPanel() {
                         style={{ ...inputStyle, flex: 1 }}
                         placeholder={`Texto da alternativa ${alt.id.toUpperCase()}`}
                       />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAlternativa(p.key, altIndex)}
+                        disabled={p.alternativas.length <= MIN_ALTERNATIVAS}
+                        aria-label={`Remover alternativa ${alt.id.toUpperCase()}`}
+                        title={
+                          p.alternativas.length <= MIN_ALTERNATIVAS
+                            ? `Uma pergunta precisa de pelo menos ${MIN_ALTERNATIVAS} alternativas`
+                            : "Remover alternativa"
+                        }
+                        style={{
+                          border: "none",
+                          background: "transparent",
+                          color: p.alternativas.length <= MIN_ALTERNATIVAS ? theme.color.textFaint : theme.color.danger,
+                          cursor: p.alternativas.length <= MIN_ALTERNATIVAS ? "default" : "pointer",
+                          fontSize: 16,
+                          lineHeight: 1,
+                          padding: "4px 6px",
+                          flexShrink: 0,
+                        }}
+                      >
+                        ×
+                      </button>
                     </div>
                   ))}
                 </div>
+                <Button
+                  variant="secondary"
+                  onClick={() => handleAddAlternativa(p.key)}
+                  disabled={p.alternativas.length >= MAX_ALTERNATIVAS}
+                  style={{ marginBottom: 12, fontSize: theme.font.size.xs, padding: "4px 10px" }}
+                >
+                  + Adicionar alternativa
+                </Button>
 
                 <label style={labelStyle}>Explicação (opcional)</label>
                 <textarea

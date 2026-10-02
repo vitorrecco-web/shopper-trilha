@@ -41,7 +41,7 @@ function shuffle<T>(items: T[]): T[] {
   return copy;
 }
 
-/** Tarefas 1-2: busca perguntas.json no servidor e valida (4 alternativas por pergunta, etc). */
+/** Tarefas 1-2: busca perguntas.json no servidor e valida (2 a 8 alternativas por pergunta, etc). */
 export async function fetchAndValidateQuiz(questionsDriveId: string): Promise<ValidatedPerguntas> {
   const raw = await fetchDriveFileAsText(questionsDriveId);
   const result = validatePerguntasJson(raw);

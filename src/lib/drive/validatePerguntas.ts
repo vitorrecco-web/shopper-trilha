@@ -2,8 +2,10 @@ import "server-only";
 import { z } from "zod";
 
 /**
- * Espelha exatamente o formato de perguntas-modelo.json:
- * - cada pergunta tem exatamente 4 alternativas (§4);
+ * Espelha o formato de perguntas-modelo.json:
+ * - cada pergunta tem entre 2 e 8 alternativas (originalmente eram sempre
+ *   4 — o editor visual (Admin) passou a permitir adicionar/remover
+ *   alternativas por pergunta, então a validação acompanha);
  * - a resposta correta é vinculada por ID interno, nunca pela posição
  *   visual (§4) — por isso `correta` é validado contra os IDs de
  *   `alternativas`, nunca contra um índice;
@@ -32,7 +34,10 @@ const perguntaSchema = z
   .object({
     id: z.string().min(1),
     pergunta: z.string().min(1),
-    alternativas: z.array(alternativaSchema).length(4, "cada pergunta precisa ter exatamente 4 alternativas"),
+    alternativas: z
+      .array(alternativaSchema)
+      .min(2, "cada pergunta precisa ter pelo menos 2 alternativas")
+      .max(8, "cada pergunta pode ter no máximo 8 alternativas"),
     correta: z.string().min(1),
     explicacao: z.string().optional(),
     review_topic: z.string().min(1).optional(),
