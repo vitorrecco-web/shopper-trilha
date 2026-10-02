@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentSession } from "@/lib/auth/getSession";
+import { canAccessAdminHub, isFullAccessRole } from "@/lib/auth/roles";
 import { getUserById } from "@/lib/repositories/usersRepository";
 import { resolveActiveEnrollment } from "@/lib/services/activeEnrollmentService";
 import { computeUserProgress } from "@/lib/services/userProgress";
@@ -21,31 +22,37 @@ export default async function EscolherTrilhaPage() {
   const user = await getUserById(session.userId);
   if (!user || user.status === "inactive") redirect("/login");
 
-  const active = await resolveActiveEnrollment(user.id, session.activeProgramId);
+  const fullAccess = isFullAccessRole(user.role);
+  const active = await resolveActiveEnrollment(user.id, session.activeProgramId, user.role);
   if (active.status === "none") redirect("/app");
   if (active.status === "ok") redirect("/app");
 
   const options = await Promise.all(
     active.options.map(async (o) => {
-      const progress = await computeUserProgress(user.id, o.programId, o.trackId);
+      // Perfis sem travas não têm progresso (modo visualização).
+      const progress = fullAccess ? null : await computeUserProgress(user.id, o.programId, o.trackId);
       return {
         programId: o.programId,
         programNome: o.programNome,
         trackNome: o.trackNome,
-        percent: progress.percent,
+        percent: progress ? progress.percent : null,
       };
     })
   );
 
   return (
     <PageShell>
-      <Header homeHref="/app" />
+      <Header homeHref="/app" adminHref={canAccessAdminHub(user.role) ? "/admin" : undefined} />
       <Container maxWidth={560}>
-        <h1 style={{ fontSize: theme.font.size.xxl, marginTop: 0, marginBottom: 4 }}>Escolha sua trilha</h1>
+        <h1 style={{ fontSize: theme.font.size.xxl, marginTop: 0, marginBottom: 4 }}>
+          {fullAccess ? "Escolha o Programa" : "Escolha sua trilha"}
+        </h1>
         <p style={{ color: theme.color.textMuted, fontSize: theme.font.size.sm, marginBottom: theme.space(5) }}>
-          Olá, {user.nome_completo}. Você está em mais de uma trilha — qual delas você vai fazer agora?
+          {fullAccess
+            ? `Olá, ${user.nome_completo}. Você tem acesso a todos os Programas, sem travas — qual deseja ver?`
+            : `Olá, ${user.nome_completo}. Você está em mais de uma trilha — qual delas você vai fazer agora?`}
         </p>
-        <TrilhaPicker options={options} />
+        <TrilhaPicker options={options} viewOnly={fullAccess} />
       </Container>
     </PageShell>
   );

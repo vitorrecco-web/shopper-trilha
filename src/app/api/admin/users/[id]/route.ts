@@ -94,6 +94,7 @@ const updateUserSchema = z.object({
   turno: z.string().trim().min(1).nullable().optional(),
   login: z.string().trim().min(1).optional(),
   status: z.enum(["active", "inactive"]).optional(),
+  role: z.enum(["student", "viewer", "analyst", "admin"]).optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
@@ -106,6 +107,14 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if (!parsed.success) {
     return NextResponse.json(
       { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos." },
+      { status: 400 }
+    );
+  }
+
+  // Ninguém tira o próprio acesso de administrador (evita ficar sem nenhum gestor).
+  if (parsed.data.role && parsed.data.role !== "admin" && params.id === guard.session.userId) {
+    return NextResponse.json(
+      { ok: false, error: "Você não pode remover o seu próprio acesso de administrador." },
       { status: 400 }
     );
   }

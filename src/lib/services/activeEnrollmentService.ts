@@ -1,5 +1,7 @@
 import "server-only";
 import { listActiveEnrollmentsForUser } from "@/lib/repositories/enrollmentsRepository";
+import { listActivePrograms } from "@/lib/repositories/programsRepository";
+import { isFullAccessRole, type Role } from "@/lib/auth/roles";
 
 /**
  * Resolve qual Programa/Função um aluno está usando "agora". Centraliza a
@@ -28,7 +30,9 @@ export type ActiveEnrollmentResult =
   // `hasMultiple` diz se o usuário tem mais de uma matrícula ativa — usado
   // pela UI (ex: Header) para só mostrar "Trocar de trilha" quando faz
   // sentido, sem precisar de outra consulta.
-  | { status: "ok"; enrollment: EnrollmentOption; hasMultiple: boolean };
+  // `fullAccess` = perfil sem travas (viewer/analyst/admin): a "matrícula"
+  // é só o Programa escolhido, `trackId` é sempre null e NADA é gravado.
+  | { status: "ok"; enrollment: EnrollmentOption; hasMultiple: boolean; fullAccess: boolean };
 
 function toOption(e: Awaited<ReturnType<typeof listActiveEnrollmentsForUser>>[number]): EnrollmentOption {
   return {
@@ -40,23 +44,52 @@ function toOption(e: Awaited<ReturnType<typeof listActiveEnrollmentsForUser>>[nu
   };
 }
 
-export async function resolveActiveEnrollment(
-  userId: string,
-  sessionActiveProgramId?: string
-): Promise<ActiveEnrollmentResult> {
-  const enrollments = await listActiveEnrollmentsForUser(userId);
+/**
+ * Perfis sem travas (viewer/analyst/admin) não têm matrícula: as opções
+ * são TODOS os Programas ativos, sem Função (`trackId = null` — quem monta
+ * a lista de módulos usa `fullAccess` para trazer também os módulos de
+ * função específica).
+ */
+export async function listFullAccessOptions(): Promise<EnrollmentOption[]> {
+  const programs = await listActivePrograms();
+  return programs.map((p) => ({
+    enrollmentId: `full-access:${p.id}`,
+    programId: p.id,
+    programNome: p.nome,
+    trackId: null,
+    trackNome: null,
+  }));
+}
 
-  if (enrollments.length === 0) return { status: "none" };
+function pickAmong(
+  options: EnrollmentOption[],
+  sessionActiveProgramId: string | undefined,
+  fullAccess: boolean
+): ActiveEnrollmentResult {
+  if (options.length === 0) return { status: "none" };
 
-  if (enrollments.length === 1) {
-    return { status: "ok", enrollment: toOption(enrollments[0]), hasMultiple: false };
+  if (options.length === 1) {
+    return { status: "ok", enrollment: options[0], hasMultiple: false, fullAccess };
   }
 
   const chosen = sessionActiveProgramId
-    ? enrollments.find((e) => e.program_id === sessionActiveProgramId)
+    ? options.find((o) => o.programId === sessionActiveProgramId)
     : undefined;
 
-  if (chosen) return { status: "ok", enrollment: toOption(chosen), hasMultiple: true };
+  if (chosen) return { status: "ok", enrollment: chosen, hasMultiple: true, fullAccess };
 
-  return { status: "choose", options: enrollments.map(toOption) };
+  return { status: "choose", options };
+}
+
+export async function resolveActiveEnrollment(
+  userId: string,
+  sessionActiveProgramId?: string,
+  role: Role = "student"
+): Promise<ActiveEnrollmentResult> {
+  if (isFullAccessRole(role)) {
+    return pickAmong(await listFullAccessOptions(), sessionActiveProgramId, true);
+  }
+
+  const enrollments = await listActiveEnrollmentsForUser(userId);
+  return pickAmong(enrollments.map(toOption), sessionActiveProgramId, false);
 }

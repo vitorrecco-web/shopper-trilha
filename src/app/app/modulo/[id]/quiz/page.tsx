@@ -23,12 +23,18 @@ export default async function QuizPage({ params }: { params: { id: string } }) {
   const user = await getUserById(session.userId);
   if (!user || user.status === "inactive") redirect("/login");
 
-  const active = await resolveActiveEnrollment(user.id, session.activeProgramId);
+  const active = await resolveActiveEnrollment(user.id, session.activeProgramId, user.role);
   if (active.status === "choose") redirect("/app/trilhas");
   if (active.status === "none") redirect("/app");
 
   const moduleHref = `/app/modulo/${params.id}`;
-  const access = await getModuleAccessInfo(user.id, active.enrollment.programId, active.enrollment.trackId, params.id);
+  const access = await getModuleAccessInfo(
+    user.id,
+    active.enrollment.programId,
+    active.enrollment.trackId,
+    params.id,
+    active.fullAccess
+  );
   if (!access) notFound();
   if (!access.unlocked || !access.module.has_questions) redirect(moduleHref);
   if (!access.materialAccessed) redirect(moduleHref);
@@ -56,7 +62,9 @@ export default async function QuizPage({ params }: { params: { id: string } }) {
           ← Voltar
         </Link>
 
-        <p style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint, marginBottom: 2 }}>Avaliação</p>
+        <p style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint, marginBottom: 2 }}>
+          Avaliação{active.fullAccess ? " — modo visualização (a tentativa não é registrada)" : ""}
+        </p>
         <h1 style={{ fontSize: theme.font.size.xl, marginTop: 0, marginBottom: theme.space(4), color: theme.color.text }}>
           {access.module.nome}
         </h1>

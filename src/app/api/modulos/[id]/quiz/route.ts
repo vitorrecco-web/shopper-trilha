@@ -22,14 +22,14 @@ import { unlockNextModule } from "@/lib/services/progressionService";
 async function authorize(
   moduleId: string
 ): Promise<
-  | { user: User; programId: string; trackId: string | null; access: ModuleAccessInfo }
+  | { user: User; programId: string; trackId: string | null; viewOnly: boolean; access: ModuleAccessInfo }
   | { error: NextResponse }
 > {
   const auth = await requireActiveUserOrRespond();
   if ("response" in auth) return { error: auth.response };
-  const { user, programId, trackId } = auth;
+  const { user, programId, trackId, viewOnly } = auth;
 
-  const access = await getModuleAccessInfo(user.id, programId, trackId, moduleId);
+  const access = await getModuleAccessInfo(user.id, programId, trackId, moduleId, viewOnly);
   if (!access || !access.unlocked || !access.module.has_questions || !access.module.questions_drive_id) {
     return { error: NextResponse.json({ ok: false, error: "Quiz não disponível." }, { status: 404 }) };
   }
@@ -50,7 +50,7 @@ async function authorize(
     };
   }
 
-  return { user, programId, trackId, access };
+  return { user, programId, trackId, viewOnly, access };
 }
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
@@ -76,7 +76,7 @@ const submitSchema = z.object({
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await authorize(params.id);
   if ("error" in auth) return auth.error;
-  const { user, programId, trackId, access } = auth;
+  const { user, programId, trackId, viewOnly, access } = auth;
 
   const body = await request.json().catch(() => null);
   const parsed = submitSchema.safeParse(body);
@@ -98,26 +98,30 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   // Tarefa 6: corrige no servidor, nunca confiando em nota enviada pelo cliente.
   const result = gradeSubmission(validated.perguntas, parsed.data.answers);
 
-  // Tarefa 9: registra a tentativa com snapshot completo — histórico
-  // nunca é sobrescrito, mesmo que essa tentativa seja reprovada.
-  await recordQuizAttempt({
-    user_id: user.id,
-    module_id: access.module.id,
-    score: result.score,
-    correct_answers: result.correctAnswers,
-    total_questions: result.totalQuestions,
-    passed: result.passed,
-    answers: { answers: parsed.data.answers },
-    questions_snapshot: { perguntas: validated.perguntas },
-  });
+  // Modo visualização (perfis sem travas): corrige e mostra o resultado,
+  // mas NÃO grava tentativa nem progresso — não polui indicadores.
+  if (!viewOnly) {
+    // Tarefa 9: registra a tentativa com snapshot completo — histórico
+    // nunca é sobrescrito, mesmo que essa tentativa seja reprovada.
+    await recordQuizAttempt({
+      user_id: user.id,
+      module_id: access.module.id,
+      score: result.score,
+      correct_answers: result.correctAnswers,
+      total_questions: result.totalQuestions,
+      passed: result.passed,
+      answers: { answers: parsed.data.answers },
+      questions_snapshot: { perguntas: validated.perguntas },
+    });
 
-  // Tarefas 10-11: só em caso de aprovação — nunca em reprovação, o que
-  // já garante "nova tentativa não remove aprovação anterior" e "nota
-  // menor não substitui a melhor nota" (a própria função do repositório
-  // só aumenta best_score e nunca desmarca completed).
-  if (result.passed) {
-    await markPassedAndMaybeUpdateBestScore(user.id, access.module.id, result.score);
-    await unlockNextModule(user.id, programId, trackId, access.module.id);
+    // Tarefas 10-11: só em caso de aprovação — nunca em reprovação, o que
+    // já garante "nova tentativa não remove aprovação anterior" e "nota
+    // menor não substitui a melhor nota" (a própria função do repositório
+    // só aumenta best_score e nunca desmarca completed).
+    if (result.passed) {
+      await markPassedAndMaybeUpdateBestScore(user.id, access.module.id, result.score);
+      await unlockNextModule(user.id, programId, trackId, access.module.id);
+    }
   }
 
   return NextResponse.json({

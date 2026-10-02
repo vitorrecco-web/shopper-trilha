@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getCurrentSession } from "@/lib/auth/getSession";
+import { canViewIndicadores } from "@/lib/auth/roles";
 import { getModuleUserBreakdown, getAllWrongQuestions } from "@/lib/services/dashboardService";
 import { theme } from "@/lib/ui/theme";
 import { Header } from "@/components/ui/Header";
@@ -30,7 +31,7 @@ function formatDate(iso: string | null): string {
 export default async function ModuloIndicadorPage({ params }: { params: { id: string } }) {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
-  if (session.role !== "admin") redirect("/app");
+  if (!canViewIndicadores(session.role)) redirect("/app");
 
   const [data, wrongQuestions] = await Promise.all([
     getModuleUserBreakdown(params.id),

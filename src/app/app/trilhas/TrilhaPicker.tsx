@@ -26,7 +26,7 @@ const cardStyle: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
-export function TrilhaPicker({ options }: { options: TrilhaOption[] }) {
+export function TrilhaPicker({ options, viewOnly = false }: { options: TrilhaOption[]; viewOnly?: boolean }) {
   const router = useRouter();
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +71,11 @@ export function TrilhaPicker({ options }: { options: TrilhaOption[] }) {
               </div>
             )}
             <div style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, marginTop: 4 }}>
-              {o.percent !== null ? `${o.percent}% concluído` : "Progresso indisponível"}
+              {viewOnly
+                ? "Modo visualização"
+                : o.percent !== null
+                  ? `${o.percent}% concluído`
+                  : "Progresso indisponível"}
             </div>
           </div>
           <Button onClick={() => handleEnter(o.programId)} disabled={loadingId !== null}>

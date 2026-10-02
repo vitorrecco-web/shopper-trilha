@@ -23,9 +23,9 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireActiveUserOrRespond();
   if ("response" in auth) return auth.response;
-  const { user, programId, trackId } = auth;
+  const { user, programId, trackId, viewOnly } = auth;
 
-  const access = await getModuleAccessInfo(user.id, programId, trackId, params.id);
+  const access = await getModuleAccessInfo(user.id, programId, trackId, params.id, viewOnly);
   if (!access || !access.unlocked || access.module.material_type !== "youtube") {
     return NextResponse.json({ ok: false, error: "Módulo não disponível." }, { status: 404 });
   }
@@ -34,6 +34,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ ok: false, error: "Dados inválidos." }, { status: 400 });
+  }
+
+  // Modo visualização: não grava nada, só devolve o que o player reportou.
+  if (viewOnly) {
+    return NextResponse.json({
+      ok: true,
+      videoWatchedPercent: parsed.data.percent,
+      thresholdReached: parsed.data.percent >= VIDEO_WATCHED_THRESHOLD_PERCENT,
+    });
   }
 
   await markMaterialAccessed(user.id, access.module.id);

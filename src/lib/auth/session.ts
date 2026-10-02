@@ -11,7 +11,7 @@ import type { SessionOptions } from "iron-session";
  */
 export interface SessionData {
   userId: string;
-  role: "admin" | "student";
+  role: "admin" | "student" | "viewer" | "analyst";
   nome: string;
   /**
    * Qual Programa (trilha) o aluno escolheu usar NESTA sessão, quando ele

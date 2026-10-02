@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Program, Track } from "@/lib/db/types";
 import { theme } from "@/lib/ui/theme";
+import { roleLabels, type Role } from "@/lib/auth/roles";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 
@@ -161,6 +162,7 @@ export function NewUserForm({ programs }: { programs: Program[] }) {
     cd: "",
     turno: "",
     status: "active" as "active" | "inactive",
+    role: "student" as Role,
   });
   const [trilhas, setTrilhas] = useState<TrilhaRow[]>([
     { key: nextRowKey(), program_id: programs[0]?.id ?? "", track_id: "" },
@@ -184,7 +186,8 @@ export function NewUserForm({ programs }: { programs: Program[] }) {
     setTrilhas((prev) => prev.filter((t) => t.key !== key));
   }
 
-  const trilhasValidas = trilhas.every((t) => t.program_id);
+  const isStudent = form.role === "student";
+  const trilhasValidas = !isStudent || trilhas.every((t) => t.program_id);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -199,7 +202,8 @@ export function NewUserForm({ programs }: { programs: Program[] }) {
           matricula: form.matricula || null,
           login: form.login,
           password: form.password,
-          enrollments: trilhas.map((t) => ({ program_id: t.program_id, track_id: t.track_id || null })),
+          role: form.role,
+          enrollments: isStudent ? trilhas.map((t) => ({ program_id: t.program_id, track_id: t.track_id || null })) : [],
           cd: form.cd || null,
           turno: form.turno || null,
           status: form.status,
@@ -261,26 +265,58 @@ export function NewUserForm({ programs }: { programs: Program[] }) {
           />
         </label>
 
-        <span style={{ ...labelStyle, marginBottom: 8 }}>Trilhas *</span>
-        {trilhas.map((row) => (
-          <TrilhaRowFields
-            key={row.key}
-            row={row}
-            programs={programs}
-            onChange={(patch) => updateTrilha(row.key, patch)}
-            onRemove={() => removeTrilha(row.key)}
-            canRemove={trilhas.length > 1}
-          />
-        ))}
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={addTrilha}
-          disabled={programs.length === 0}
-          style={{ marginBottom: theme.space(4) }}
-        >
-          + Adicionar trilha
-        </Button>
+        <label style={labelStyle}>
+          Perfil *
+          <select style={inputStyle} value={form.role} onChange={(e) => update("role", e.target.value as Role)}>
+            {(["student", "viewer", "analyst", "admin"] as Role[]).map((r) => (
+              <option key={r} value={r}>
+                {roleLabels[r]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {isStudent ? (
+          <>
+            <span style={{ ...labelStyle, marginBottom: 8 }}>Trilhas *</span>
+            {trilhas.map((row) => (
+              <TrilhaRowFields
+                key={row.key}
+                row={row}
+                programs={programs}
+                onChange={(patch) => updateTrilha(row.key, patch)}
+                onRemove={() => removeTrilha(row.key)}
+                canRemove={trilhas.length > 1}
+              />
+            ))}
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={addTrilha}
+              disabled={programs.length === 0}
+              style={{ marginBottom: theme.space(4) }}
+            >
+              + Adicionar trilha
+            </Button>
+          </>
+        ) : (
+          <p
+            style={{
+              fontSize: theme.font.size.sm,
+              color: theme.color.infoText,
+              background: theme.color.infoBg,
+              borderRadius: theme.radius.md,
+              padding: "10px 12px",
+              marginBottom: theme.space(4),
+            }}
+          >
+            {form.role === "viewer" &&
+              "Vê todos os Programas e módulos liberados, sem precisar de trilha. Nada que fizer é registrado."}
+            {form.role === "analyst" &&
+              "Vê todos os Programas e módulos liberados (sem registrar nada) e acessa os Indicadores em modo leitura."}
+            {form.role === "admin" && "Acesso a tudo: painel do gestor completo e visão de todos os Programas."}
+          </p>
+        )}
 
         <label style={labelStyle}>
           CD/Galpão

@@ -16,9 +16,9 @@ import { unlockNextModule } from "@/lib/services/progressionService";
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
   const auth = await requireActiveUserOrRespond();
   if ("response" in auth) return auth.response;
-  const { user, programId, trackId } = auth;
+  const { user, programId, trackId, viewOnly } = auth;
 
-  const access = await getModuleAccessInfo(user.id, programId, trackId, params.id);
+  const access = await getModuleAccessInfo(user.id, programId, trackId, params.id, viewOnly);
   if (!access || !access.unlocked || access.module.material_type !== "youtube") {
     return NextResponse.json({ ok: false, error: "Módulo não disponível." }, { status: 404 });
   }
@@ -35,8 +35,11 @@ export async function POST(_request: Request, { params }: { params: { id: string
     );
   }
 
-  await markCompletedWithoutQuiz(user.id, access.module.id);
-  await unlockNextModule(user.id, programId, trackId, access.module.id);
+  // Modo visualização: nada é concluído nem liberado.
+  if (!viewOnly) {
+    await markCompletedWithoutQuiz(user.id, access.module.id);
+    await unlockNextModule(user.id, programId, trackId, access.module.id);
+  }
 
   return NextResponse.json({
     ok: true,

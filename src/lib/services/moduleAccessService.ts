@@ -1,9 +1,10 @@
 import "server-only";
-import type { Module } from "@/lib/db/types";
+import type { Module, UserModule } from "@/lib/db/types";
 import { listActivePhases } from "@/lib/repositories/phasesRepository";
 import { listActiveModulesForTrack } from "@/lib/repositories/modulesRepository";
 import { listUserModules } from "@/lib/repositories/userModulesRepository";
 import { computeTrilhaView, buildOrderedModules } from "./trilhaView";
+import { loadFullAccessModules } from "./trilhaViewService";
 import { findNextModuleId } from "./progressionService";
 
 /**
@@ -44,18 +45,22 @@ export async function getModuleAccessInfo(
   userId: string,
   programId: string,
   trackId: string | null,
-  moduleId: string
+  moduleId: string,
+  // Perfis sem travas (viewer/analyst/admin): todo módulo do Programa
+  // (inclusive de função específica) liberado, material e vídeo já
+  // considerados "vistos" e nenhum progresso lido — modo visualização.
+  fullAccess = false
 ): Promise<ModuleAccessInfo | null> {
   const [phases, modules, userModules] = await Promise.all([
     listActivePhases(programId),
-    listActiveModulesForTrack(programId, trackId),
-    listUserModules(userId),
+    fullAccess ? loadFullAccessModules(programId, false) : listActiveModulesForTrack(programId, trackId),
+    fullAccess ? Promise.resolve([] as UserModule[]) : listUserModules(userId),
   ]);
 
   const targetModule = modules.find((m) => m.id === moduleId);
   if (!targetModule) return null; // não existe, inativo, ou não aplicável a esta trilha
 
-  const view = computeTrilhaView(phases, modules, userModules);
+  const view = computeTrilhaView(phases, modules, userModules, { bypassLocks: fullAccess });
   const phaseView = view.phases.find((p) => p.modules.some((m) => m.id === moduleId));
   const moduleView = phaseView?.modules.find((m) => m.id === moduleId);
   if (!phaseView || !moduleView) return null;
@@ -66,13 +71,13 @@ export async function getModuleAccessInfo(
 
   const videoWatchedPercent = userModules.find((um) => um.module_id === moduleId)?.video_watched_percent ?? null;
   const videoThresholdReached =
-    videoWatchedPercent !== null && videoWatchedPercent >= VIDEO_WATCHED_THRESHOLD_PERCENT;
+    fullAccess || (videoWatchedPercent !== null && videoWatchedPercent >= VIDEO_WATCHED_THRESHOLD_PERCENT);
 
   return {
     module: targetModule,
     unlocked: moduleView.unlocked,
     completed: moduleView.completed,
-    materialAccessed: moduleView.materialAccessed,
+    materialAccessed: fullAccess || moduleView.materialAccessed,
     bestScore: moduleView.bestScore,
     videoWatchedPercent,
     videoThresholdReached,

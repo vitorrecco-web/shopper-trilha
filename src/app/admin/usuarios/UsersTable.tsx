@@ -6,6 +6,7 @@ import type { UserProgress } from "@/lib/services/userProgress";
 import type { TrackStatus } from "@/lib/services/trackStatus";
 import { trackStatusLabel } from "@/lib/services/trackStatus";
 import { theme } from "@/lib/ui/theme";
+import { roleLabels, type Role } from "@/lib/auth/roles";
 import { Badge } from "@/components/ui/Badge";
 
 export interface UserRow {
@@ -19,6 +20,7 @@ export interface UserRow {
   cd: string | null;
   turno: string | null;
   status: "active" | "inactive";
+  role: Role;
   last_login_at: string | null;
   /** Combinado de todas as trilhas da pessoa — ver `computeUsersProgressBatch`. */
   progress: UserProgress;
@@ -192,7 +194,9 @@ export function UsersTable({
                 </td>
                 <td style={{ padding: "12px 14px", color: theme.color.textMuted }}>{u.matricula ?? "—"}</td>
                 <td style={{ padding: "12px 14px" }}>
-                  {u.programas_nomes.length > 0 ? (
+                  {u.role !== "student" ? (
+                    <Badge tone="primary">{roleLabels[u.role]}</Badge>
+                  ) : u.programas_nomes.length > 0 ? (
                     <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                       {u.programas_nomes.map((nome) => (
                         <Badge key={nome} tone="neutral">

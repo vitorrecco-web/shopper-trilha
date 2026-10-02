@@ -108,6 +108,7 @@ export default async function UsuarioDetalhePage({ params }: { params: { id: str
             cd: user.cd,
             turno: user.turno,
             status: user.status,
+            role: user.role,
             created_at: user.created_at,
             last_login_at: user.last_login_at,
           }}

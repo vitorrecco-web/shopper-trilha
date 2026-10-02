@@ -53,7 +53,15 @@ function ModuleRow({ m }: { m: TrilhaView["phases"][number]["modules"][number] }
   );
 }
 
-function PhaseAccordionItem({ phase, defaultOpen }: { phase: TrilhaView["phases"][number]; defaultOpen: boolean }) {
+function PhaseAccordionItem({
+  phase,
+  defaultOpen,
+  viewOnly,
+}: {
+  phase: TrilhaView["phases"][number];
+  defaultOpen: boolean;
+  viewOnly: boolean;
+}) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
@@ -93,7 +101,7 @@ function PhaseAccordionItem({ phase, defaultOpen }: { phase: TrilhaView["phases"
               fontWeight: 600,
             }}
           >
-            {phase.percent}%
+            {viewOnly ? `${phase.totalCount} módulo${phase.totalCount === 1 ? "" : "s"}` : `${phase.percent}%`}
           </span>
           <span style={{ fontSize: 12, color: theme.color.textFaint }}>{open ? "▲" : "▼"}</span>
         </span>
@@ -121,34 +129,61 @@ function PhaseAccordionItem({ phase, defaultOpen }: { phase: TrilhaView["phases"
   );
 }
 
-export function TrilhaAccordion({ trilha, nome }: { trilha: TrilhaView; nome: string }) {
+export function TrilhaAccordion({
+  trilha,
+  nome,
+  viewOnly = false,
+  programaNome,
+}: {
+  trilha: TrilhaView;
+  nome: string;
+  /** Perfil sem travas: tudo liberado, sem progresso — nada do que for feito aqui é gravado. */
+  viewOnly?: boolean;
+  programaNome?: string;
+}) {
   return (
     <div>
       <h1 style={{ fontSize: theme.font.size.xl, marginTop: 0, marginBottom: 2, color: theme.color.text }}>
-        Minha Trilha
+        {viewOnly && programaNome ? programaNome : "Minha Trilha"}
       </h1>
       <p style={{ color: theme.color.textMuted, fontSize: theme.font.size.sm, marginBottom: theme.space(5) }}>
         Olá, {nome}
       </p>
 
-      <div
-        style={{
-          background: theme.color.surface,
-          border: `1px solid ${theme.color.border}`,
-          borderRadius: theme.radius.lg,
-          boxShadow: theme.shadow.sm,
-          padding: theme.space(4),
-          marginBottom: theme.space(5),
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-          <span style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted }}>Progresso geral</span>
-          <span style={{ fontSize: theme.font.size.sm, color: theme.color.text, fontWeight: 600 }}>
-            {trilha.overallCompleted}/{trilha.overallTotal} módulos
-          </span>
+      {viewOnly ? (
+        <div
+          style={{
+            background: theme.color.infoBg,
+            color: theme.color.infoText,
+            borderRadius: theme.radius.lg,
+            padding: theme.space(4),
+            marginBottom: theme.space(5),
+            fontSize: theme.font.size.sm,
+          }}
+        >
+          <b>Modo visualização.</b> Todos os módulos estão liberados e nada do que você fizer aqui (material, quiz)
+          é registrado.
         </div>
-        <ProgressBar percent={trilha.overallPercent} height={8} />
-      </div>
+      ) : (
+        <div
+          style={{
+            background: theme.color.surface,
+            border: `1px solid ${theme.color.border}`,
+            borderRadius: theme.radius.lg,
+            boxShadow: theme.shadow.sm,
+            padding: theme.space(4),
+            marginBottom: theme.space(5),
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+            <span style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted }}>Progresso geral</span>
+            <span style={{ fontSize: theme.font.size.sm, color: theme.color.text, fontWeight: 600 }}>
+              {trilha.overallCompleted}/{trilha.overallTotal} módulos
+            </span>
+          </div>
+          <ProgressBar percent={trilha.overallPercent} height={8} />
+        </div>
+      )}
 
       {trilha.phases.length === 0 ? (
         <p style={{ fontSize: 14, color: theme.color.textMuted }}>
@@ -156,7 +191,7 @@ export function TrilhaAccordion({ trilha, nome }: { trilha: TrilhaView; nome: st
         </p>
       ) : (
         trilha.phases.map((phase) => (
-          <PhaseAccordionItem key={phase.id} phase={phase} defaultOpen={phase.isDefaultOpen} />
+          <PhaseAccordionItem key={phase.id} phase={phase} defaultOpen={phase.isDefaultOpen} viewOnly={viewOnly} />
         ))
       )}
     </div>

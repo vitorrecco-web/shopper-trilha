@@ -15,9 +15,9 @@ import { fetchDriveFileAsBuffer } from "@/lib/drive/googleDriveClient";
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireActiveUserOrRespond();
   if ("response" in auth) return auth.response;
-  const { user, programId, trackId } = auth;
+  const { user, programId, trackId, viewOnly } = auth;
 
-  const access = await getModuleAccessInfo(user.id, programId, trackId, params.id);
+  const access = await getModuleAccessInfo(user.id, programId, trackId, params.id, viewOnly);
 
   // Mesma resposta para "não existe/não aplicável" e "existe mas está
   // bloqueado" — não revela qual dos dois casos é.
@@ -36,15 +36,18 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     );
   }
 
-  // §9: primeiro acesso ao visualizador registra material_accessed + data/hora.
-  const wasAlreadyAccessed = access.materialAccessed;
-  await markMaterialAccessed(user.id, access.module.id);
+  // Modo visualização (perfis sem travas): serve o PDF sem registrar nada.
+  if (!viewOnly) {
+    // §9: primeiro acesso ao visualizador registra material_accessed + data/hora.
+    const wasAlreadyAccessed = access.materialAccessed;
+    await markMaterialAccessed(user.id, access.module.id);
 
-  // Fase 8, tarefa 7 / §3.3: sem perguntas, o primeiro acesso já conclui
-  // o módulo e libera o próximo.
-  if (!wasAlreadyAccessed && !access.module.has_questions) {
-    await markCompletedWithoutQuiz(user.id, access.module.id);
-    await unlockNextModule(user.id, programId, trackId, access.module.id);
+    // Fase 8, tarefa 7 / §3.3: sem perguntas, o primeiro acesso já conclui
+    // o módulo e libera o próximo.
+    if (!wasAlreadyAccessed && !access.module.has_questions) {
+      await markCompletedWithoutQuiz(user.id, access.module.id);
+      await unlockNextModule(user.id, programId, trackId, access.module.id);
+    }
   }
 
   const download = request.nextUrl.searchParams.get("download") === "1";

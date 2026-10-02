@@ -73,7 +73,19 @@ export function buildOrderedModules(phases: Phase[], modules: Module[]): Module[
   return flat;
 }
 
-export function computeTrilhaView(phases: Phase[], modules: Module[], userModules: UserModule[]): TrilhaView {
+/**
+ * `bypassLocks` (perfis sem travas — viewer/analyst/admin): todo módulo
+ * aparece liberado e a ordem recebida em `modules` é mantida (quem chama
+ * já agrupa por Função, senão módulos de funções diferentes com a mesma
+ * `ordem` se misturariam).
+ */
+export function computeTrilhaView(
+  phases: Phase[],
+  modules: Module[],
+  userModules: UserModule[],
+  opts: { bypassLocks?: boolean } = {}
+): TrilhaView {
+  const bypassLocks = Boolean(opts.bypassLocks);
   const userModuleByModuleId = new Map(userModules.map((um) => [um.module_id, um]));
 
   const modulesByPhaseId = new Map<string, Module[]>();
@@ -82,8 +94,10 @@ export function computeTrilhaView(phases: Phase[], modules: Module[], userModule
     list.push(m);
     modulesByPhaseId.set(m.phase_id, list);
   }
-  for (const list of modulesByPhaseId.values()) {
-    list.sort((a, b) => a.ordem - b.ordem);
+  if (!bypassLocks) {
+    for (const list of modulesByPhaseId.values()) {
+      list.sort((a, b) => a.ordem - b.ordem);
+    }
   }
 
   const orderedPhases = [...phases].sort((a, b) => a.ordem - b.ordem);
@@ -105,7 +119,7 @@ export function computeTrilhaView(phases: Phase[], modules: Module[], userModule
   for (const { module } of flat) {
     const um = userModuleByModuleId.get(module.id);
     const persistedUnlock = Boolean(um?.unlocked_at);
-    const unlocked = persistedUnlock || previousCompleted;
+    const unlocked = bypassLocks || persistedUnlock || previousCompleted;
     const completed = Boolean(um?.completed);
 
     const isCurrent = unlocked && !completed && !currentAssigned;

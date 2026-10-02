@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentSession } from "@/lib/auth/getSession";
+import { homePathForRole } from "@/lib/auth/roles";
 
 /**
  * "/" é só roteamento — nunca renderiza nada para o usuário (REDESIGN
@@ -9,5 +10,5 @@ import { getCurrentSession } from "@/lib/auth/getSession";
 export default async function HomePage() {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
-  redirect(session.role === "admin" ? "/admin" : "/app");
+  redirect(homePathForRole(session.role));
 }

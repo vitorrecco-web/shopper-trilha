@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { UserProgress } from "@/lib/services/userProgress";
 import { computeTrackStatus, trackStatusLabel } from "@/lib/services/trackStatus";
 import { theme } from "@/lib/ui/theme";
+import { roleLabels, type Role } from "@/lib/auth/roles";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 
@@ -16,6 +17,7 @@ interface UserInfo {
   cd: string | null;
   turno: string | null;
   status: "active" | "inactive";
+  role: Role;
   created_at: string;
   last_login_at: string | null;
 }
@@ -367,7 +369,12 @@ export function UserDetail({
     turno: user.turno ?? "",
     login: user.login,
     status: user.status,
+    role: user.role,
   });
+  // Trilhas/progresso/módulos só fazem sentido para aluno — perfis sem
+  // travas não têm matrícula nem progresso registrado.
+  const isStudent = user.role === "student";
+
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveOk, setSaveOk] = useState(false);
@@ -397,6 +404,7 @@ export function UserDetail({
           turno: form.turno || null,
           login: form.login,
           status: form.status,
+          role: form.role,
         }),
       });
       const data = await res.json();
@@ -444,6 +452,7 @@ export function UserDetail({
         {user.nome_completo}
       </h1>
       <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, marginBottom: theme.space(5) }}>
+        <Badge tone={isStudent ? "neutral" : "primary"}>{roleLabels[user.role]}</Badge>{" "}
         Matrícula: {user.matricula ?? "—"} · Início: {formatDate(user.created_at)} · Último acesso:{" "}
         {formatDate(user.last_login_at)}
       </p>
@@ -451,6 +460,7 @@ export function UserDetail({
       {/* Trilhas (matrículas) — um usuário pode ter mais de uma ao mesmo
           tempo. Uma matrícula existente nunca é editada em si (§11.4) —
           só adicionada (trilha nova) ou removida (soft-delete). */}
+      {isStudent && (
       <section style={sectionStyle}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: theme.space(3) }}>
           <h2 style={{ fontSize: theme.font.size.md, margin: 0, color: theme.color.text }}>Trilhas</h2>
@@ -516,8 +526,10 @@ export function UserDetail({
           />
         )}
       </section>
+      )}
 
       {/* Progresso geral */}
+      {isStudent && (
       <section style={sectionStyle}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <h2 style={{ fontSize: theme.font.size.md, margin: 0, color: theme.color.text }}>Progresso</h2>
@@ -543,6 +555,7 @@ export function UserDetail({
           </p>
         )}
       </section>
+      )}
 
       {/* Editar dados */}
       <section style={sectionStyle}>
@@ -572,6 +585,16 @@ export function UserDetail({
               <input style={inputStyle} value={form.turno} onChange={(e) => update("turno", e.target.value)} />
             </label>
           </div>
+          <label style={labelStyle}>
+            Perfil
+            <select style={inputStyle} value={form.role} onChange={(e) => update("role", e.target.value as Role)}>
+              {(["student", "viewer", "analyst", "admin"] as Role[]).map((r) => (
+                <option key={r} value={r}>
+                  {roleLabels[r]}
+                </option>
+              ))}
+            </select>
+          </label>
           <label style={labelStyle}>
             Status
             <select
@@ -658,6 +681,7 @@ export function UserDetail({
       {/* Histórico de módulos, agrupado por fase — tentativas de prova
           vinculadas a cada módulo, expansíveis inline (substitui a antiga
           tabela global de "Tentativas de prova" no fim da página). */}
+      {isStudent && (
       <section style={sectionStyle}>
         <h2 style={{ fontSize: theme.font.size.md, marginTop: 0, marginBottom: theme.space(3), color: theme.color.text }}>
           Módulos
@@ -696,6 +720,7 @@ export function UserDetail({
           </div>
         )}
       </section>
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentSession } from "@/lib/auth/getSession";
+import { canViewIndicadores } from "@/lib/auth/roles";
 import { getAllModulePerformance } from "@/lib/services/dashboardService";
 import { theme } from "@/lib/ui/theme";
 import { Header } from "@/components/ui/Header";
@@ -10,7 +11,7 @@ import { ModulosTable } from "./ModulosTable";
 export default async function ModulosIndicadorPage() {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
-  if (session.role !== "admin") redirect("/app");
+  if (!canViewIndicadores(session.role)) redirect("/app");
 
   const modules = await getAllModulePerformance();
 

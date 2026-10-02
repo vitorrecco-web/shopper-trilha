@@ -21,7 +21,7 @@ CREATE TABLE users (
     track_id UUID REFERENCES tracks(id) ON DELETE RESTRICT,
     cd TEXT,
     turno TEXT,
-    role TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('admin','student')),
+    role TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('admin','student','viewer','analyst')),
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

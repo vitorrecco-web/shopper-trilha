@@ -15,12 +15,15 @@ export function Header({
   context,
   homeHref,
   trocarTrilhaHref,
+  adminHref,
 }: {
   nome?: string;
   context?: string;
   homeHref: string;
   /** Só passado quando o aluno tem mais de uma trilha ativa — ver `resolveActiveEnrollment`. */
   trocarTrilhaHref?: string;
+  /** Só passado a quem pode abrir o painel (admin/analyst) estando na área do aluno. */
+  adminHref?: string;
 }) {
   return (
     <header
@@ -62,6 +65,20 @@ export function Header({
       </Link>
 
       <div style={{ display: "flex", alignItems: "center", gap: theme.space(3), minWidth: 0 }}>
+        {adminHref && (
+          <Link
+            href={adminHref}
+            style={{
+              fontSize: theme.font.size.xs,
+              color: theme.color.primaryDark,
+              textDecoration: "none",
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Painel do gestor
+          </Link>
+        )}
         {trocarTrilhaHref && (
           <Link
             href={trocarTrilhaHref}

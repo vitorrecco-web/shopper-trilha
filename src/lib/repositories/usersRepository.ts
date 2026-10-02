@@ -98,6 +98,7 @@ export interface UpdateUserInput {
   turno?: string | null;
   login?: string;
   status?: User["status"];
+  role?: User["role"];
 }
 
 export async function updateUser(id: string, input: UpdateUserInput): Promise<User> {

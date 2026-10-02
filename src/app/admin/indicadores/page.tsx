@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentSession } from "@/lib/auth/getSession";
+import { canViewIndicadores } from "@/lib/auth/roles";
 import { getDashboardOverview } from "@/lib/services/dashboardService";
 import { trackStatusLabel } from "@/lib/services/trackStatus";
 import { theme } from "@/lib/ui/theme";
@@ -48,7 +49,7 @@ function errorRateTone(errorRate: number): "danger" | "warning" | "neutral" {
 export default async function IndicadoresPage() {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
-  if (session.role !== "admin") redirect("/app");
+  if (!canViewIndicadores(session.role)) redirect("/app");
 
   const data = await getDashboardOverview();
 

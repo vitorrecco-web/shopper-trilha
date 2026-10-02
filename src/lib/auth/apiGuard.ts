@@ -42,15 +42,15 @@ export async function requireAdminOrRespond(): Promise<
  * erros). Nunca vaza detalhe de infraestrutura ao cliente.
  *
  * Resolve a matrícula ativa (`resolveActiveEnrollment`) e já devolve
- * `programId`/`trackId` prontos — essas rotas são só de aluno (quiz, PDF,
- * progresso de vídeo). Um aluno com 2+ trilhas e NENHUMA escolhida ainda
+ * `programId`/`trackId` prontos — essas rotas são de aluno (quiz, PDF,
+ * progresso de vídeo) e também dos perfis sem travas (`viewOnly: true`). Um aluno com 2+ trilhas e NENHUMA escolhida ainda
  * na sessão (`reason: "choose_program"`) não deveria bater aqui numa
  * navegação normal (a página sempre manda pra /app/trilhas antes) — só
  * acontece com uma aba antiga aberta; a API recusa com um motivo
  * reconhecível em vez de adivinhar qual trilha usar.
  */
 export async function requireActiveUserOrRespond(): Promise<
-  { user: User; programId: string; trackId: string | null } | { response: NextResponse }
+  { user: User; programId: string; trackId: string | null; viewOnly: boolean } | { response: NextResponse }
 > {
   const session = await getCurrentSession();
   if (!session) {
@@ -63,7 +63,7 @@ export async function requireActiveUserOrRespond(): Promise<
       return { response: NextResponse.json({ ok: false, error: "Usuário inválido." }, { status: 401 }) };
     }
 
-    const active = await resolveActiveEnrollment(user.id, session.activeProgramId);
+    const active = await resolveActiveEnrollment(user.id, session.activeProgramId, user.role);
     if (active.status === "none") {
       return {
         response: NextResponse.json(
@@ -81,7 +81,14 @@ export async function requireActiveUserOrRespond(): Promise<
       };
     }
 
-    return { user, programId: active.enrollment.programId, trackId: active.enrollment.trackId };
+    // `viewOnly` = perfil sem travas: as rotas devolvem o conteúdo mas NÃO
+    // gravam progresso/tentativas (modo visualização).
+    return {
+      user,
+      programId: active.enrollment.programId,
+      trackId: active.enrollment.trackId,
+      viewOnly: active.fullAccess,
+    };
   } catch (err) {
     console.error("Erro ao carregar usuário da sessão:", err);
     return {

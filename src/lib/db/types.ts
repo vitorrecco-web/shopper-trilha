@@ -6,7 +6,7 @@
  * em PROJECT_CONTEXT.md e ser refletida em uma nova migration primeiro.
  */
 
-export type UserRole = "admin" | "student";
+export type UserRole = "admin" | "student" | "viewer" | "analyst";
 export type UserStatus = "active" | "inactive";
 export type PhaseType = "specific_track" | "common";
 export type SyncStatus = "preview" | "confirmed" | "completed" | "failed" | "cancelled";

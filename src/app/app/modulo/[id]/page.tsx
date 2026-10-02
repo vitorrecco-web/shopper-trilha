@@ -22,11 +22,18 @@ export default async function ModuloPage({ params }: { params: { id: string } })
   const user = await getUserById(session.userId);
   if (!user || user.status === "inactive") redirect("/login");
 
-  const active = await resolveActiveEnrollment(user.id, session.activeProgramId);
+  const active = await resolveActiveEnrollment(user.id, session.activeProgramId, user.role);
   if (active.status === "choose") redirect("/app/trilhas");
   if (active.status === "none") redirect("/app");
 
-  const access = await getModuleAccessInfo(user.id, active.enrollment.programId, active.enrollment.trackId, params.id);
+  const viewOnly = active.fullAccess;
+  const access = await getModuleAccessInfo(
+    user.id,
+    active.enrollment.programId,
+    active.enrollment.trackId,
+    params.id,
+    viewOnly
+  );
   if (!access) notFound();
   if (!access.unlocked) redirect("/app");
 
@@ -34,7 +41,14 @@ export default async function ModuloPage({ params }: { params: { id: string } })
     <PageShell>
       <Header homeHref="/app" />
       <Container maxWidth={680}>
-        <Breadcrumb items={[{ label: "Minha Trilha", href: "/app" }, { label: access.module.nome }]} />
+        <Breadcrumb
+          items={[{ label: viewOnly ? active.enrollment.programNome : "Minha Trilha", href: "/app" }, { label: access.module.nome }]}
+        />
+        {viewOnly && (
+          <p style={{ fontSize: theme.font.size.xs, color: theme.color.textMuted, marginBottom: theme.space(2) }}>
+            Modo visualização — nada do que você fizer aqui é registrado.
+          </p>
+        )}
         <p style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint, marginBottom: 2 }}>
           {access.phaseNome}
         </p>

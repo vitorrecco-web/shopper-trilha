@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getCurrentSession } from "@/lib/auth/getSession";
+import { canViewIndicadores } from "@/lib/auth/roles";
 import { getUserModuleHistory } from "@/lib/services/dashboardService";
 import { theme } from "@/lib/ui/theme";
 import { Header } from "@/components/ui/Header";
@@ -24,7 +25,7 @@ function formatDate(iso: string | null): string {
 export default async function ColaboradorIndicadorPage({ params }: { params: { id: string } }) {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
-  if (session.role !== "admin") redirect("/app");
+  if (!canViewIndicadores(session.role)) redirect("/app");
 
   const data = await getUserModuleHistory(params.id);
   if (!data) notFound();

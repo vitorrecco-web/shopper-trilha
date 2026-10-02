@@ -2,6 +2,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { getIronSession, type IronSession } from "iron-session";
 import { getSessionOptions, type SessionData } from "./session";
+import { canViewIndicadores } from "./roles";
 
 /**
  * Lê a sessão atual a partir dos cookies da requisição (Server Components,
@@ -22,5 +23,12 @@ export async function requireSession(): Promise<IronSession<SessionData>> {
 export async function requireAdminSession(): Promise<IronSession<SessionData>> {
   const session = await requireSession();
   if (session.role !== "admin") throw new Error("FORBIDDEN");
+  return session;
+}
+
+/** Indicadores: admin e analyst (somente leitura). */
+export async function requireIndicadoresSession(): Promise<IronSession<SessionData>> {
+  const session = await requireSession();
+  if (!canViewIndicadores(session.role)) throw new Error("FORBIDDEN");
   return session;
 }

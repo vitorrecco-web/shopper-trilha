@@ -521,3 +521,20 @@ Toda a funcionalidade da V1 foi preservada; só apresentação/navegação mudar
 
 As 11 fases do `EXECUTION_PLAN.md` estão implementadas e validadas em produção. Os itens em aberto estão listados em "Débito técnico conhecido" acima — nenhum deles bloqueia o uso real pelos supervisores, são todos candidatos a uma V2.
 
+
+## Perfis de acesso (aluno, sem travas, sem travas + indicadores, administrador)
+
+Além do **Aluno** (matrícula + travas de progressão), o cadastro de usuário (`/admin/usuarios/novo` e "Editar dados") tem o campo **Perfil**:
+
+| Perfil | `users.role` | O que vê |
+|---|---|---|
+| Aluno | `student` | Só as trilhas em que está matriculado, com travas (como sempre). |
+| Aluno sem travas | `viewer` | Todos os Programas e módulos (inclusive os de função específica) liberados, sem matrícula. **Modo visualização**: nada é gravado (progresso, material acessado, tentativas de quiz). |
+| Sem travas + indicadores | `analyst` | O mesmo do `viewer` + `/admin/indicadores/**` em modo leitura (o hub `/admin` mostra só "Indicadores" e "Ver trilhas"). |
+| Administrador | `admin` | Painel do gestor completo + visão de todos os Programas. Pode haver vários. |
+
+- **Migration:** `supabase/migrations/0011_roles_full_access.sql` (troca o CHECK de `users.role`). Rode no SQL Editor **antes** de criar usuários com os perfis novos.
+- O gestor (`admin`) e o `analyst` têm o card **"Ver trilhas (visão de aluno)"** no `/admin` e o link "Painel do gestor" no cabeçalho da área do aluno.
+- Nada do que um perfil sem travas faz entra em `user_modules` / `quiz_attempts`, então os indicadores continuam só com alunos reais (`dashboardService` já filtra `role = 'student'`).
+- Ninguém consegue remover o **próprio** acesso de administrador pela tela de edição.
+- Implementação: `src/lib/auth/roles.ts` (regras puras), `activeEnrollmentService` (lista todos os Programas para perfis sem travas), `requireActiveUserOrRespond` (devolve `viewOnly`), rotas `api/modulos/**` (não gravam quando `viewOnly`).

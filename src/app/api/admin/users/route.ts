@@ -47,7 +47,9 @@ const createUserSchema = z.object({
   matricula: z.string().trim().min(1).optional().nullable(),
   login: z.string().trim().min(1, "Informe o login."),
   password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
-  enrollments: z.array(enrollmentInputSchema).min(1, "Adicione pelo menos uma trilha."),
+  // Perfil: aluno (com trilhas) ou um dos perfis sem travas (sem trilhas).
+  role: z.enum(["student", "viewer", "analyst", "admin"]).default("student"),
+  enrollments: z.array(enrollmentInputSchema).default([]),
   cd: z.string().trim().min(1).optional().nullable(),
   turno: z.string().trim().min(1).optional().nullable(),
   status: z.enum(["active", "inactive"]).optional(),
@@ -67,7 +69,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const { password, enrollments, ...rest } = parsed.data;
+  const { password, enrollments: rawEnrollments, ...rest } = parsed.data;
+
+  // Perfis sem travas veem todos os Programas e não têm matrícula — qualquer
+  // trilha enviada junto é ignorada; só o aluno exige pelo menos uma.
+  const isStudent = rest.role === "student";
+  const enrollments = isStudent ? rawEnrollments : [];
+  if (isStudent && enrollments.length === 0) {
+    return NextResponse.json({ ok: false, error: "Adicione pelo menos uma trilha." }, { status: 400 });
+  }
 
   // Um Programa não pode se repetir na mesma lista (UNIQUE(user_id, program_id) rejeitaria na 2ª linha mesmo assim).
   const programIds = enrollments.map((e) => e.program_id);

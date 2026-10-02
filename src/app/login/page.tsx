@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { theme } from "@/lib/ui/theme";
+import { homePathForRole } from "@/lib/auth/roles";
 import { Logo } from "@/components/ui/Logo";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -33,7 +34,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push(data.role === "admin" ? "/admin" : "/app");
+      router.push(homePathForRole(data.role));
       router.refresh();
     } catch {
       setError("Erro de conexão. Tente novamente.");

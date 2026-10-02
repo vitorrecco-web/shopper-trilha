@@ -48,6 +48,7 @@ export default async function UsuariosPage() {
       cd: u.cd,
       turno: u.turno,
       status: u.status,
+      role: u.role,
       last_login_at: u.last_login_at,
       progress,
       trackStatus: computeTrackStatus(progress.percent),

@@ -4,6 +4,9 @@ import { z } from "zod";
 import { getIronSession } from "iron-session";
 import { getSessionOptions, type SessionData } from "@/lib/auth/session";
 import { listActiveEnrollmentsForUser } from "@/lib/repositories/enrollmentsRepository";
+import { listActivePrograms } from "@/lib/repositories/programsRepository";
+import { getUserById } from "@/lib/repositories/usersRepository";
+import { isFullAccessRole } from "@/lib/auth/roles";
 
 const bodySchema = z.object({
   programId: z.string().uuid(),
@@ -29,15 +32,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Dados inválidos." }, { status: 400 });
   }
 
-  let enrollments;
+  let allowedProgramIds: string[];
   try {
-    enrollments = await listActiveEnrollmentsForUser(session.userId);
+    // Papel lido do banco (não do cookie) — se o perfil mudou depois do login, vale o atual.
+    const user = await getUserById(session.userId);
+    if (!user || user.status === "inactive") {
+      return NextResponse.json({ ok: false, error: "Usuário inválido." }, { status: 401 });
+    }
+    allowedProgramIds = isFullAccessRole(user.role)
+      ? (await listActivePrograms()).map((p) => p.id)
+      : (await listActiveEnrollmentsForUser(session.userId)).map((e) => e.program_id);
   } catch (err) {
     console.error("Erro ao verificar matrículas:", err instanceof Error ? err.message : err);
     return NextResponse.json({ ok: false, error: "Não foi possível processar agora." }, { status: 503 });
   }
 
-  const isValid = enrollments.some((e) => e.program_id === parsed.data.programId);
+  const isValid = allowedProgramIds.includes(parsed.data.programId);
   if (!isValid) {
     return NextResponse.json({ ok: false, error: "Essa trilha não está disponível para você." }, { status: 403 });
   }
