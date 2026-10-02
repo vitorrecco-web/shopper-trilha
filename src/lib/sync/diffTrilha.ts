@@ -22,6 +22,8 @@ export interface SyncChangeDraft {
   old_value: Record<string, unknown> | null;
   new_value: Record<string, unknown> | null;
   label: string;
+  /** Drive folder id do Programa dono desta mudança — usado pela UI (Admin) para agrupar por Programa. */
+  program_drive_folder_id: string;
 }
 
 export interface ProgramUpsert {
@@ -57,6 +59,8 @@ export interface ModuleUpsert {
   video_titulo: string | null;
   questions_drive_id: string | null;
   has_questions: boolean;
+  /** Drive folder id do Programa dono deste módulo — usado pela UI (Admin) para agrupar por Programa. */
+  program_drive_folder_id: string;
 }
 
 export interface DbSnapshot {
@@ -79,7 +83,12 @@ export interface SyncPlan {
   modulesToDeactivate: string[];
 }
 
-function diffProgram(discovered: ProgramUpsert, existing: Program | undefined, changes: SyncChangeDraft[]) {
+function diffProgram(
+  discovered: ProgramUpsert,
+  existing: Program | undefined,
+  changes: SyncChangeDraft[]
+) {
+  const programDriveId = discovered.drive_folder_id;
   if (!existing) {
     changes.push({
       entity_type: "program",
@@ -88,6 +97,7 @@ function diffProgram(discovered: ProgramUpsert, existing: Program | undefined, c
       old_value: null,
       new_value: { nome: discovered.nome },
       label: `Novo Programa: "${discovered.nome}"`,
+      program_drive_folder_id: programDriveId,
     });
     return;
   }
@@ -99,6 +109,7 @@ function diffProgram(discovered: ProgramUpsert, existing: Program | undefined, c
       old_value: { nome: existing.nome },
       new_value: { nome: discovered.nome },
       label: `Programa renomeado: "${existing.nome}" → "${discovered.nome}"`,
+      program_drive_folder_id: programDriveId,
     });
   }
   if (!existing.active) {
@@ -109,11 +120,13 @@ function diffProgram(discovered: ProgramUpsert, existing: Program | undefined, c
       old_value: { active: false },
       new_value: { active: true },
       label: `Programa reativado: "${discovered.nome}"`,
+      program_drive_folder_id: programDriveId,
     });
   }
 }
 
 function diffTrack(discovered: TrackUpsert, existing: Track | undefined, changes: SyncChangeDraft[]) {
+  const programDriveId = discovered.program_drive_folder_id;
   if (!existing) {
     changes.push({
       entity_type: "track",
@@ -122,6 +135,7 @@ function diffTrack(discovered: TrackUpsert, existing: Track | undefined, changes
       old_value: null,
       new_value: { nome: discovered.nome },
       label: `Nova trilha: "${discovered.nome}"`,
+      program_drive_folder_id: programDriveId,
     });
     return;
   }
@@ -133,6 +147,7 @@ function diffTrack(discovered: TrackUpsert, existing: Track | undefined, changes
       old_value: { nome: existing.nome },
       new_value: { nome: discovered.nome },
       label: `Trilha renomeada: "${existing.nome}" → "${discovered.nome}"`,
+      program_drive_folder_id: programDriveId,
     });
   }
   if (!existing.active) {
@@ -143,11 +158,13 @@ function diffTrack(discovered: TrackUpsert, existing: Track | undefined, changes
       old_value: { active: false },
       new_value: { active: true },
       label: `Trilha reativada: "${discovered.nome}"`,
+      program_drive_folder_id: programDriveId,
     });
   }
 }
 
 function diffPhase(discovered: PhaseUpsert, existing: Phase | undefined, changes: SyncChangeDraft[]) {
+  const programDriveId = discovered.program_drive_folder_id;
   if (!existing) {
     changes.push({
       entity_type: "phase",
@@ -156,6 +173,7 @@ function diffPhase(discovered: PhaseUpsert, existing: Phase | undefined, changes
       old_value: null,
       new_value: { nome: discovered.nome, ordem: discovered.ordem, phase_type: discovered.phase_type },
       label: `Nova fase: "${discovered.nome}"`,
+      program_drive_folder_id: programDriveId,
     });
     return;
   }
@@ -167,6 +185,7 @@ function diffPhase(discovered: PhaseUpsert, existing: Phase | undefined, changes
       old_value: { nome: existing.nome },
       new_value: { nome: discovered.nome },
       label: `Fase renomeada: "${existing.nome}" → "${discovered.nome}"`,
+      program_drive_folder_id: programDriveId,
     });
   }
   if (existing.ordem !== discovered.ordem) {
@@ -177,6 +196,7 @@ function diffPhase(discovered: PhaseUpsert, existing: Phase | undefined, changes
       old_value: { ordem: existing.ordem },
       new_value: { ordem: discovered.ordem },
       label: `Fase "${discovered.nome}" reordenada: ${existing.ordem} → ${discovered.ordem}`,
+      program_drive_folder_id: programDriveId,
     });
   }
   if (existing.phase_type !== discovered.phase_type) {
@@ -187,6 +207,7 @@ function diffPhase(discovered: PhaseUpsert, existing: Phase | undefined, changes
       old_value: { phase_type: existing.phase_type },
       new_value: { phase_type: discovered.phase_type },
       label: `Fase "${discovered.nome}" mudou de tipo: ${existing.phase_type} → ${discovered.phase_type}`,
+      program_drive_folder_id: programDriveId,
     });
   }
   if (!existing.active) {
@@ -197,11 +218,13 @@ function diffPhase(discovered: PhaseUpsert, existing: Phase | undefined, changes
       old_value: { active: false },
       new_value: { active: true },
       label: `Fase reativada: "${discovered.nome}"`,
+      program_drive_folder_id: programDriveId,
     });
   }
 }
 
 function diffModule(discovered: ModuleUpsert, existing: Module | undefined, changes: SyncChangeDraft[]) {
+  const programDriveId = discovered.program_drive_folder_id;
   if (!existing) {
     changes.push({
       entity_type: "module",
@@ -210,6 +233,7 @@ function diffModule(discovered: ModuleUpsert, existing: Module | undefined, chan
       old_value: null,
       new_value: { nome: discovered.nome, ordem: discovered.ordem },
       label: `Novo módulo: "${discovered.nome}"`,
+      program_drive_folder_id: programDriveId,
     });
     return;
   }
@@ -221,6 +245,7 @@ function diffModule(discovered: ModuleUpsert, existing: Module | undefined, chan
       old_value: { nome: existing.nome },
       new_value: { nome: discovered.nome },
       label: `Módulo renomeado: "${existing.nome}" → "${discovered.nome}"`,
+      program_drive_folder_id: programDriveId,
     });
   }
   if (existing.ordem !== discovered.ordem) {
@@ -231,6 +256,7 @@ function diffModule(discovered: ModuleUpsert, existing: Module | undefined, chan
       old_value: { ordem: existing.ordem },
       new_value: { ordem: discovered.ordem },
       label: `Módulo "${discovered.nome}" reordenado: ${existing.ordem} → ${discovered.ordem}`,
+      program_drive_folder_id: programDriveId,
     });
   }
   if (existing.pdf_drive_id !== discovered.pdf_drive_id) {
@@ -241,6 +267,7 @@ function diffModule(discovered: ModuleUpsert, existing: Module | undefined, chan
       old_value: { pdf_nome: existing.pdf_nome },
       new_value: { pdf_nome: discovered.pdf_nome },
       label: `Módulo "${discovered.nome}": PDF atualizado`,
+      program_drive_folder_id: programDriveId,
     });
   }
   if (existing.material_type !== discovered.material_type) {
@@ -251,6 +278,7 @@ function diffModule(discovered: ModuleUpsert, existing: Module | undefined, chan
       old_value: { material_type: existing.material_type },
       new_value: { material_type: discovered.material_type },
       label: `Módulo "${discovered.nome}": material principal mudou de ${existing.material_type === "youtube" ? "YouTube" : "PDF"} para ${discovered.material_type === "youtube" ? "YouTube" : "PDF"}`,
+      program_drive_folder_id: programDriveId,
     });
   }
   if (existing.video_external_id !== discovered.video_external_id) {
@@ -261,6 +289,7 @@ function diffModule(discovered: ModuleUpsert, existing: Module | undefined, chan
       old_value: { video_external_id: existing.video_external_id },
       new_value: { video_external_id: discovered.video_external_id },
       label: `Módulo "${discovered.nome}": vídeo do YouTube ${discovered.video_external_id ? "atualizado" : "removido"}`,
+      program_drive_folder_id: programDriveId,
     });
   }
   if (existing.has_questions !== discovered.has_questions) {
@@ -271,6 +300,7 @@ function diffModule(discovered: ModuleUpsert, existing: Module | undefined, chan
       old_value: { has_questions: existing.has_questions },
       new_value: { has_questions: discovered.has_questions },
       label: `Módulo "${discovered.nome}": ${discovered.has_questions ? "perguntas adicionadas" : "perguntas removidas"}`,
+      program_drive_folder_id: programDriveId,
     });
   }
   const existingHasTrack = existing.track_id !== null;
@@ -284,6 +314,7 @@ function diffModule(discovered: ModuleUpsert, existing: Module | undefined, chan
       old_value: { had_track: existingHasTrack },
       new_value: { had_track: discoveredHasTrack },
       label: `Módulo "${discovered.nome}" mudou de fase/trilha`,
+      program_drive_folder_id: programDriveId,
     });
   }
   if (!existing.active) {
@@ -294,6 +325,7 @@ function diffModule(discovered: ModuleUpsert, existing: Module | undefined, chan
       old_value: { active: false },
       new_value: { active: true },
       label: `Módulo reativado: "${discovered.nome}"`,
+      program_drive_folder_id: programDriveId,
     });
   }
 }
@@ -303,8 +335,10 @@ export function diffTrilha(mapped: MappedUniversidade, db: DbSnapshot): SyncPlan
   const changes: SyncChangeDraft[] = [];
 
   const dbProgramsByDriveId = new Map(db.programs.map((p) => [p.drive_folder_id, p]));
+  const dbProgramsById = new Map(db.programs.map((p) => [p.id, p]));
   const dbTracksByDriveId = new Map(db.tracks.map((t) => [t.drive_folder_id, t]));
   const dbPhasesByDriveId = new Map(db.phases.map((p) => [p.drive_folder_id, p]));
+  const dbPhasesById = new Map(db.phases.map((p) => [p.id, p]));
   const dbModulesByDriveId = new Map(db.modules.map((m) => [m.drive_folder_id, m]));
 
   const programUpserts: ProgramUpsert[] = [];
@@ -317,7 +351,7 @@ export function diffTrilha(mapped: MappedUniversidade, db: DbSnapshot): SyncPlan
   const discoveredPhaseIds = new Set<string>();
   const discoveredModuleIds = new Set<string>();
 
-  function pushModule(mod: MappedModule, phaseDriveId: string, trackDriveId: string | null) {
+  function pushModule(mod: MappedModule, phaseDriveId: string, trackDriveId: string | null, programDriveId: string) {
     discoveredModuleIds.add(mod.drive_folder_id);
     const upsert: ModuleUpsert = {
       drive_folder_id: mod.drive_folder_id,
@@ -333,6 +367,7 @@ export function diffTrilha(mapped: MappedUniversidade, db: DbSnapshot): SyncPlan
       video_titulo: mod.video_titulo,
       questions_drive_id: mod.questions_drive_id,
       has_questions: mod.has_questions,
+      program_drive_folder_id: programDriveId,
     };
     moduleUpserts.push(upsert);
     diffModule(upsert, dbModulesByDriveId.get(mod.drive_folder_id), changes);
@@ -358,7 +393,7 @@ export function diffTrilha(mapped: MappedUniversidade, db: DbSnapshot): SyncPlan
 
       if (phase.phase_type === "common") {
         for (const mod of phase.modules) {
-          pushModule(mod, phase.drive_folder_id, null);
+          pushModule(mod, phase.drive_folder_id, null, program.drive_folder_id);
         }
       } else {
         for (const track of phase.tracks) {
@@ -372,7 +407,7 @@ export function diffTrilha(mapped: MappedUniversidade, db: DbSnapshot): SyncPlan
           diffTrack(trackUpsert, dbTracksByDriveId.get(track.drive_folder_id), changes);
 
           for (const mod of track.modules) {
-            pushModule(mod, phase.drive_folder_id, track.drive_folder_id);
+            pushModule(mod, phase.drive_folder_id, track.drive_folder_id, program.drive_folder_id);
           }
         }
       }
@@ -427,11 +462,13 @@ export function diffTrilha(mapped: MappedUniversidade, db: DbSnapshot): SyncPlan
       old_value: { nome: p.nome },
       new_value: null,
       label: `Programa removido: "${p.nome}"`,
+      program_drive_folder_id: driveId,
     });
   }
   for (const driveId of tracksToDeactivate) {
     const t = dbTracksByDriveId.get(driveId);
     if (!t) continue;
+    const program = dbProgramsById.get(t.program_id);
     changes.push({
       entity_type: "track",
       entity_drive_id: driveId,
@@ -439,11 +476,13 @@ export function diffTrilha(mapped: MappedUniversidade, db: DbSnapshot): SyncPlan
       old_value: { nome: t.nome },
       new_value: null,
       label: `Trilha removida: "${t.nome}"`,
+      program_drive_folder_id: program?.drive_folder_id ?? driveId,
     });
   }
   for (const driveId of phasesToDeactivate) {
     const p = dbPhasesByDriveId.get(driveId);
     if (!p) continue;
+    const program = dbProgramsById.get(p.program_id);
     changes.push({
       entity_type: "phase",
       entity_drive_id: driveId,
@@ -451,11 +490,14 @@ export function diffTrilha(mapped: MappedUniversidade, db: DbSnapshot): SyncPlan
       old_value: { nome: p.nome },
       new_value: null,
       label: `Fase removida: "${p.nome}"`,
+      program_drive_folder_id: program?.drive_folder_id ?? driveId,
     });
   }
   for (const driveId of modulesToDeactivate) {
     const m = dbModulesByDriveId.get(driveId);
     if (!m) continue;
+    const phase = dbPhasesById.get(m.phase_id);
+    const program = phase ? dbProgramsById.get(phase.program_id) : undefined;
     changes.push({
       entity_type: "module",
       entity_drive_id: driveId,
@@ -463,6 +505,7 @@ export function diffTrilha(mapped: MappedUniversidade, db: DbSnapshot): SyncPlan
       old_value: { nome: m.nome },
       new_value: null,
       label: `Módulo removido: "${m.nome}"`,
+      program_drive_folder_id: program?.drive_folder_id ?? driveId,
     });
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { theme } from "@/lib/ui/theme";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -39,12 +39,13 @@ interface StructureResult {
   error?: string;
 }
 
-/** Tipos do diff — GET /api/admin/sync/preview e POST /api/admin/sync/confirm (Fase 5, inalteradas). */
+/** Tipos do diff — GET /api/admin/sync/preview e POST /api/admin/sync/confirm (Fase 5, estendidas com o Programa dono de cada mudança). */
 interface ChangeItem {
-  entity_type: "track" | "phase" | "module";
+  entity_type: "program" | "track" | "phase" | "module";
   entity_drive_id: string;
   change_type: "added" | "removed" | "renamed" | "reordered" | "updated";
   label: string;
+  program_drive_folder_id: string;
 }
 interface SyncPreviewResult {
   ok: boolean;
@@ -106,13 +107,128 @@ function ModuleRow({ m }: { m: MappedModule }) {
   );
 }
 
+function ChangeRow({ c }: { c: ChangeItem }) {
+  return (
+    <div style={{ fontSize: 13, display: "flex", gap: 8, alignItems: "baseline" }}>
+      <Badge tone={changeTypeTone[c.change_type]}>{changeTypeLabel[c.change_type]}</Badge>
+      <span style={{ color: theme.color.text }}>{c.label}</span>
+    </div>
+  );
+}
+
+interface ProgramGroup {
+  drive_folder_id: string;
+  nome: string;
+  phases: MappedPhase[];
+  changes: ChangeItem[];
+}
+
+/** Seção colapsável de um Programa — junta "estrutura lida" e "mudanças detectadas" daquele Programa só, em vez de duas listas globais gigantes. */
+function ProgramSection({
+  group,
+  expanded,
+  onToggle,
+}: {
+  group: ProgramGroup;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div style={boxStyle}>
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          width: "100%",
+          background: "transparent",
+          border: "none",
+          padding: 0,
+          cursor: "pointer",
+          textAlign: "left",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span
+            style={{
+              display: "inline-block",
+              transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+              transition: "transform 0.15s",
+              color: theme.color.textFaint,
+              fontSize: 12,
+            }}
+          >
+            ▶
+          </span>
+          <Badge tone="primary">Programa</Badge>
+          <b style={{ fontSize: theme.font.size.base, color: theme.color.text }}>{group.nome}</b>
+        </div>
+        <Badge tone={group.changes.length > 0 ? "warning" : "neutral"}>
+          {group.changes.length} mudança{group.changes.length === 1 ? "" : "s"}
+        </Badge>
+      </button>
+
+      {expanded && (
+        <div style={{ marginTop: theme.space(3) }}>
+          {group.changes.length > 0 && (
+            <div style={{ marginBottom: theme.space(3), display: "flex", flexDirection: "column", gap: 6 }}>
+              {group.changes.map((c, i) => (
+                <ChangeRow key={i} c={c} />
+              ))}
+            </div>
+          )}
+
+          {group.phases.length > 0 ? (
+            group.phases.map((phase) => (
+              <div key={phase.drive_folder_id} style={{ border: `1px solid ${theme.color.border}`, borderRadius: theme.radius.md, padding: theme.space(3), marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                  <b style={{ fontSize: theme.font.size.sm, color: theme.color.text }}>
+                    Fase {phase.ordem} — {phase.nome}
+                  </b>
+                  <span style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint }}>
+                    {phase.phase_type === "common" ? "comum" : "por trilha"}
+                  </span>
+                </div>
+
+                {phase.phase_type === "common"
+                  ? phase.modules.map((m) => <ModuleRow key={m.drive_folder_id} m={m} />)
+                  : phase.tracks.map((t) => (
+                      <div key={t.drive_folder_id} style={{ marginBottom: 8, marginLeft: 8 }}>
+                        <div style={{ fontSize: 13, color: theme.color.primaryDark, fontWeight: 600, marginBottom: 2 }}>
+                          {t.nome}
+                        </div>
+                        <div style={{ marginLeft: 12 }}>
+                          {t.modules.map((m) => (
+                            <ModuleRow key={m.drive_folder_id} m={m} />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+              </div>
+            ))
+          ) : (
+            <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, margin: 0 }}>
+              Este Programa não foi encontrado nesta leitura do Drive (removido ou renomeado para fora da estrutura).
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Painel único de Drive + sincronização. "Analisar alterações" busca, em
  * paralelo, a estrutura lida do Drive (GET .../drive/preview) e o diff
  * contra o banco (GET .../sync/preview) — nenhuma das duas rotas grava
  * nada. Confirmar/Cancelar continuam exatamente como estavam (POST
- * .../sync/confirm, ou só limpar a tela). Nenhuma regra de
- * sincronização foi alterada aqui, só a apresentação em uma tela só.
+ * .../sync/confirm, ou só limpar a tela).
+ *
+ * A partir da Universidade Shopper (vários Programas), "estrutura lida"
+ * e "mudanças detectadas" são agrupadas por Programa num acordeão — uma
+ * trilha com muitas fases/módulos deixava de caber numa lista única.
  */
 export function DriveSyncPanel() {
   const [structure, setStructure] = useState<StructureResult | null>(null);
@@ -121,6 +237,7 @@ export function DriveSyncPanel() {
   const [analyzing, setAnalyzing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   async function handleAnalyze() {
     setAnalyzing(true);
@@ -128,6 +245,7 @@ export function DriveSyncPanel() {
     setConfirmResult(null);
     setStructure(null);
     setSyncPreview(null);
+    setExpanded(new Set());
     try {
       const [structRes, syncRes] = await Promise.all([
         fetch("/api/admin/drive/preview").then((r) => r.json()),
@@ -164,9 +282,36 @@ export function DriveSyncPanel() {
     }
   }
 
+  function toggleProgram(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   const hasAnalysis = Boolean(structure || syncPreview);
-  const changes = syncPreview?.changes ?? [];
+  const changes = useMemo(() => syncPreview?.changes ?? [], [syncPreview]);
   const warnings = syncPreview?.warnings ?? [];
+
+  // Junta "estrutura lida" (por Programa) com as mudanças de cada Programa
+  // numa lista só — inclui também Programas que só aparecem nas mudanças
+  // (ex: removido do Drive, então não vem mais na leitura fresca).
+  const programGroups = useMemo<ProgramGroup[]>(() => {
+    const byId = new Map<string, ProgramGroup>();
+    for (const p of structure?.programs ?? []) {
+      byId.set(p.drive_folder_id, { drive_folder_id: p.drive_folder_id, nome: p.nome, phases: p.phases, changes: [] });
+    }
+    for (const c of changes) {
+      const id = c.program_drive_folder_id;
+      if (!byId.has(id)) {
+        byId.set(id, { drive_folder_id: id, nome: "Programa removido", phases: [], changes: [] });
+      }
+      byId.get(id)!.changes.push(c);
+    }
+    return [...byId.values()];
+  }, [structure, changes]);
 
   return (
     <div>
@@ -192,76 +337,24 @@ export function DriveSyncPanel() {
         </p>
       )}
 
-      {/* Estrutura lida do Drive agora — um bloco por Programa (Universidade Shopper) */}
-      {structure?.ok && (
+      {structure?.ok && syncPreview?.ok && (
         <>
-          <p style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint, marginBottom: 8, marginTop: 4 }}>
-            Estrutura lida do Drive agora:
-          </p>
-          {structure.programs?.map((program) => (
-            <div key={program.drive_folder_id} style={{ marginBottom: theme.space(4) }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                <Badge tone="primary">Programa</Badge>
-                <b style={{ fontSize: theme.font.size.lg, color: theme.color.text }}>{program.nome}</b>
-              </div>
-              {program.phases.map((phase) => (
-                <div key={phase.drive_folder_id} style={{ ...boxStyle, marginLeft: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                    <b style={{ fontSize: theme.font.size.base, color: theme.color.text }}>
-                      Fase {phase.ordem} — {phase.nome}
-                    </b>
-                    <span style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint }}>
-                      {phase.phase_type === "common" ? "comum" : "por trilha"}
-                    </span>
-                  </div>
-
-                  {phase.phase_type === "common"
-                    ? phase.modules.map((m) => <ModuleRow key={m.drive_folder_id} m={m} />)
-                    : phase.tracks.map((t) => (
-                        <div key={t.drive_folder_id} style={{ marginBottom: 8, marginLeft: 8 }}>
-                          <div style={{ fontSize: 13, color: theme.color.primaryDark, fontWeight: 600, marginBottom: 2 }}>
-                            {t.nome}
-                          </div>
-                          <div style={{ marginLeft: 12 }}>
-                            {t.modules.map((m) => (
-                              <ModuleRow key={m.drive_folder_id} m={m} />
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                </div>
-              ))}
-            </div>
-          ))}
-        </>
-      )}
-
-      {/* Diff contra o banco + avisos + ação de confirmar/cancelar */}
-      {syncPreview?.ok && (
-        <>
-          <p style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint, marginBottom: theme.space(4) }}>
+          <p style={{ fontSize: theme.font.size.xs, color: theme.color.textFaint, marginBottom: theme.space(2) }}>
             Última sincronização: {syncPreview.lastSync ? formatDate(syncPreview.lastSync.completedAt) : "nunca"}
           </p>
+          <p style={{ fontSize: theme.font.size.sm, color: theme.color.text, marginBottom: theme.space(4) }}>
+            <b>Mudanças encontradas ({changes.length})</b> em {programGroups.length} Programa
+            {programGroups.length === 1 ? "" : "s"} — clique em um Programa para ver o detalhe.
+          </p>
 
-          <div style={boxStyle}>
-            <b style={{ fontSize: theme.font.size.base, color: theme.color.text }}>
-              Mudanças detectadas ({changes.length})
-            </b>
-            {changes.length > 0 ? (
-              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-                {changes.map((c, i) => (
-                  <div key={i} style={{ fontSize: 13, display: "flex", gap: 8, alignItems: "baseline" }}>
-                    <Badge tone={changeTypeTone[c.change_type]}>{changeTypeLabel[c.change_type]}</Badge>
-                    <span style={{ color: theme.color.text }}>{c.label}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p style={{ fontSize: theme.font.size.sm, color: theme.color.textMuted, marginTop: 8 }}>
-                Nenhuma mudança — o banco já reflete o Drive.
-              </p>
-            )}
-          </div>
+          {programGroups.map((group) => (
+            <ProgramSection
+              key={group.drive_folder_id}
+              group={group}
+              expanded={expanded.has(group.drive_folder_id)}
+              onToggle={() => toggleProgram(group.drive_folder_id)}
+            />
+          ))}
 
           {/* Avisos preservados: módulo sem PDF, perguntas.json inválido,
               pasta fora do padrão, colisão de ordem, etc — vindos do
