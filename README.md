@@ -538,3 +538,17 @@ Além do **Aluno** (matrícula + travas de progressão), o cadastro de usuário 
 - Nada do que um perfil sem travas faz entra em `user_modules` / `quiz_attempts`, então os indicadores continuam só com alunos reais (`dashboardService` já filtra `role = 'student'`).
 - Ninguém consegue remover o **próprio** acesso de administrador pela tela de edição.
 - Implementação: `src/lib/auth/roles.ts` (regras puras), `activeEnrollmentService` (lista todos os Programas para perfis sem travas), `requireActiveUserOrRespond` (devolve `viewOnly`), rotas `api/modulos/**` (não gravam quando `viewOnly`).
+
+## Conteúdo dos módulos pelo app (Admin > Conteúdo dos módulos)
+
+Em `/admin/conteudo` o gestor adiciona ou troca o material principal de um módulo sem mexer no Drive:
+
+- **PDF** (até 25 MB), **PowerPoint .pptx** (até 50 MB; o Drive converte em Google Slides no upload e o app exporta para PDF — o aluno vê só PDF; animações/vídeos embutidos não são mantidos) ou **link do YouTube**.
+- O **título** informado vira o nome do módulo (regra §5.1: nome do PDF sem `.pdf`, ou `titulo` do `video.json`).
+- O arquivo vai **direto do navegador para o Drive** (sessão de upload resumível criada em `/api/admin/conteudo/iniciar-upload`), por causa do limite de ~4,5 MB por requisição da Vercel; depois `/api/admin/conteudo/finalizar` confere o arquivo na pasta do módulo, converte (PowerPoint), manda o material anterior para a **lixeira do Drive** (reversível) e atualiza o banco com os mesmos valores que a sincronização derivaria — "Analisar alterações" depois não mostra diferença.
+- Cada pasta de módulo mantém **exatamente 1 material** (§5.1); `perguntas.json` nunca é tocado.
+- Trocar o material **não** apaga o progresso de quem já estudou.
+- Se um envio for interrompido, pode sobrar um arquivo `__novo_material*` na pasta do módulo — apague-o no Drive (a sincronização avisaria "2 PDFs").
+- Se a conversão do PowerPoint falhar (apresentação muito grande para o limite de ~10 MB de exportação do Drive), salve como PDF pelo PowerPoint e envie o PDF.
+- O PDF para o aluno agora é servido **em stream** (`api/modulos/[id]/pdf`), então PDFs maiores que 4,5 MB funcionam.
+- Exige `GOOGLE_OAUTH_REFRESH_TOKEN` com o escopo `https://www.googleapis.com/auth/drive` (leitura e escrita).

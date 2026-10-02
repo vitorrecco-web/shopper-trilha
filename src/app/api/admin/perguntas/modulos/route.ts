@@ -50,6 +50,10 @@ export async function GET() {
           trackNome: m.track_id ? (trackById.get(m.track_id)?.nome ?? null) : null,
           hasQuestionsFile: Boolean(m.questions_drive_id),
           hasQuestions: m.has_questions,
+          // Material principal (usado por Admin > Conteúdo).
+          materialType: m.material_type,
+          hasMaterial: m.material_type === "youtube" ? Boolean(m.video_drive_id) : Boolean(m.pdf_drive_id),
+          videoExternalId: m.video_external_id,
           active: m.active,
         };
       })

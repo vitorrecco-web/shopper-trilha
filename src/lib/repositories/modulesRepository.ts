@@ -134,3 +134,39 @@ export async function setModuleQuestionsDriveId(id: string, questionsDriveId: st
     .eq("id", id);
   if (error) throw error;
 }
+
+export type ModuleMaterialInput =
+  | { type: "pdf"; nome: string; pdf_drive_id: string; pdf_nome: string }
+  | { type: "youtube"; nome: string; video_drive_id: string; video_external_id: string; video_titulo: string };
+
+/**
+ * Admin > Conteúdo: troca o material principal do módulo gravando EXATAMENTE
+ * o que a sincronização derivaria da pasta (título = nome do PDF sem
+ * extensão, ou `titulo` do video.json) — assim "Analisar alterações" depois
+ * não mostra diferença. Os campos do material que saiu são zerados.
+ */
+export async function setModuleMaterial(id: string, input: ModuleMaterialInput): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const patch =
+    input.type === "pdf"
+      ? {
+          nome: input.nome,
+          material_type: "pdf" as const,
+          pdf_drive_id: input.pdf_drive_id,
+          pdf_nome: input.pdf_nome,
+          video_drive_id: null,
+          video_external_id: null,
+          video_titulo: null,
+        }
+      : {
+          nome: input.nome,
+          material_type: "youtube" as const,
+          pdf_drive_id: null,
+          pdf_nome: null,
+          video_drive_id: input.video_drive_id,
+          video_external_id: input.video_external_id,
+          video_titulo: input.video_titulo,
+        };
+  const { error } = await supabase.from("modules").update(patch).eq("id", id);
+  if (error) throw error;
+}

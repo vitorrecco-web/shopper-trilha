@@ -1,5 +1,6 @@
 import "server-only";
 import { google } from "googleapis";
+import { Readable } from "stream";
 import type { DriveItem, DriveLister } from "./types";
 
 /**
@@ -178,4 +179,137 @@ export async function createDriveJsonFile(folderId: string, name: string, conten
     throw new Error("O Drive não devolveu o id do arquivo recém-criado.");
   }
   return res.data.id;
+}
+
+/* ------------------------------------------------------------------ *
+ * Conteúdo dos módulos pelo app (Admin > Conteúdo) e estrutura.
+ * ------------------------------------------------------------------ */
+
+export const GOOGLE_SLIDES_MIME = "application/vnd.google-apps.presentation";
+const FIELDS_META = "id, name, mimeType, size, parents, trashed";
+
+export interface DriveFileMeta {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number | null;
+  parents: string[];
+  trashed: boolean;
+}
+
+export async function getDriveFileMeta(fileId: string): Promise<DriveFileMeta> {
+  const auth = getAuth();
+  const drive = google.drive({ version: "v3", auth });
+  const res = await drive.files.get({ fileId, fields: FIELDS_META, supportsAllDrives: true });
+  return {
+    id: res.data.id!,
+    name: res.data.name ?? "",
+    mimeType: res.data.mimeType ?? "",
+    size: res.data.size ? Number(res.data.size) : null,
+    parents: res.data.parents ?? [],
+    trashed: Boolean(res.data.trashed),
+  };
+}
+
+/**
+ * Inicia uma sessão de upload RESUMÍVEL no Drive e devolve a URL dela. O
+ * navegador envia o arquivo direto para essa URL — assim o conteúdo não
+ * passa pela função do servidor (limite de ~4,5 MB por requisição na
+ * Vercel). O header `Origin` na criação da sessão é o que libera o CORS
+ * para esse site.
+ *
+ * `targetMimeType` = tipo do arquivo que FICA no Drive. Para PowerPoint,
+ * passar `GOOGLE_SLIDES_MIME` com `uploadContentType` = tipo do .pptx: o
+ * Drive converte para Google Slides no upload (depois exportado para PDF).
+ */
+export async function startResumableUpload(args: {
+  parentFolderId: string;
+  name: string;
+  targetMimeType: string;
+  uploadContentType: string;
+  sizeBytes: number;
+  origin: string;
+}): Promise<string> {
+  const auth = getAuth();
+  const { token } = await auth.getAccessToken();
+  if (!token) throw new Error("Não foi possível obter o token de acesso do Drive.");
+
+  const res = await fetch(
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true&fields=id,name,mimeType,size",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json; charset=UTF-8",
+        "X-Upload-Content-Type": args.uploadContentType,
+        "X-Upload-Content-Length": String(args.sizeBytes),
+        Origin: args.origin,
+      },
+      body: JSON.stringify({ name: args.name, parents: [args.parentFolderId], mimeType: args.targetMimeType }),
+    }
+  );
+
+  if (!res.ok) {
+    const err = new Error(`Drive recusou iniciar o upload (${res.status}).`) as Error & { code?: number };
+    err.code = res.status;
+    throw err;
+  }
+  const location = res.headers.get("location");
+  if (!location) throw new Error("O Drive não devolveu a URL da sessão de upload.");
+  return location;
+}
+
+export async function trashDriveFile(fileId: string): Promise<void> {
+  const auth = getAuth();
+  const drive = google.drive({ version: "v3", auth });
+  await drive.files.update({ fileId, requestBody: { trashed: true }, supportsAllDrives: true });
+}
+
+export async function renameDriveFile(fileId: string, name: string): Promise<void> {
+  const auth = getAuth();
+  const drive = google.drive({ version: "v3", auth });
+  await drive.files.update({ fileId, requestBody: { name }, supportsAllDrives: true });
+}
+
+/** Exporta um Google Slides/Docs para PDF (limite do Drive: ~10 MB de saída). */
+export async function exportDriveFileAsPdf(fileId: string): Promise<Buffer> {
+  const auth = getAuth();
+  const drive = google.drive({ version: "v3", auth });
+  const res = await drive.files.export(
+    { fileId, mimeType: "application/pdf" },
+    { responseType: "arraybuffer" }
+  );
+  return Buffer.from(res.data as ArrayBuffer);
+}
+
+/** Cria um arquivo binário (ex: PDF) numa pasta. Devolve o fileId. */
+export async function createDriveBinaryFile(
+  folderId: string,
+  name: string,
+  mimeType: string,
+  content: Buffer
+): Promise<string> {
+  const auth = getAuth();
+  const drive = google.drive({ version: "v3", auth });
+  const res = await drive.files.create({
+    requestBody: { name, parents: [folderId], mimeType },
+    media: { mimeType, body: Readable.from(content) },
+    fields: "id",
+    supportsAllDrives: true,
+  });
+  if (!res.data.id) throw new Error("O Drive não devolveu o id do arquivo recém-criado.");
+  return res.data.id;
+}
+
+/**
+ * Lê um arquivo do Drive como STREAM (sem carregar tudo na memória) — usado
+ * para servir PDFs grandes ao aluno sem estourar o limite de ~4,5 MB de
+ * resposta bufferizada da Vercel.
+ */
+export async function streamDriveFile(fileId: string): Promise<{ stream: Readable; size: number | null }> {
+  const auth = getAuth();
+  const drive = google.drive({ version: "v3", auth });
+  const res = await drive.files.get({ fileId, alt: "media", supportsAllDrives: true }, { responseType: "stream" });
+  const len = res.headers?.["content-length"];
+  return { stream: res.data as unknown as Readable, size: len ? Number(len) : null };
 }

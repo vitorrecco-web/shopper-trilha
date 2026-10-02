@@ -39,6 +39,12 @@ const cards: HubCard[] = [
     adminOnly: true,
   },
   {
+    href: "/admin/conteudo",
+    title: "Conteúdo dos módulos",
+    description: "Adicionar ou trocar o PDF, a apresentação PowerPoint ou o vídeo do YouTube de cada módulo",
+    adminOnly: true,
+  },
+  {
     href: "/admin/indicadores",
     title: "Indicadores",
     description: "Conclusão média, desempenho por módulo e perguntas mais erradas",

@@ -4,7 +4,8 @@ import { requireActiveUserOrRespond } from "@/lib/auth/apiGuard";
 import { getModuleAccessInfo } from "@/lib/services/moduleAccessService";
 import { markMaterialAccessed, markCompletedWithoutQuiz } from "@/lib/repositories/userModulesRepository";
 import { unlockNextModule } from "@/lib/services/progressionService";
-import { fetchDriveFileAsBuffer } from "@/lib/drive/googleDriveClient";
+import { Readable } from "stream";
+import { getDriveFileMeta, streamDriveFile } from "@/lib/drive/googleDriveClient";
 
 /**
  * Fase 8, tarefas 2-3, 6-7 e critério de aceite: serve o PDF só depois
@@ -25,9 +26,15 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({ ok: false, error: "Módulo não disponível." }, { status: 404 });
   }
 
-  let buffer: Buffer;
+  // Stream (não buffer): um PDF grande (ex: PowerPoint convertido enviado
+  // pelo Admin) não pode ser carregado inteiro na memória nem estourar o
+  // limite de ~4,5 MB de resposta bufferizada da Vercel.
+  let stream: Readable;
+  let size: number | null = null;
   try {
-    buffer = await fetchDriveFileAsBuffer(access.module.pdf_drive_id);
+    const meta = await getDriveFileMeta(access.module.pdf_drive_id);
+    size = meta.size;
+    ({ stream } = await streamDriveFile(access.module.pdf_drive_id));
   } catch (err) {
     console.error("Erro ao buscar PDF do Drive:", err);
     return NextResponse.json(
@@ -53,12 +60,12 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   const download = request.nextUrl.searchParams.get("download") === "1";
   const filename = (access.module.pdf_nome ?? "material.pdf").replace(/["\r\n]/g, "");
 
-  return new NextResponse(buffer, {
+  return new NextResponse(Readable.toWeb(stream) as unknown as ReadableStream, {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `${download ? "attachment" : "inline"}; filename="${filename}"`,
-      "Content-Length": String(buffer.length),
+      ...(size !== null ? { "Content-Length": String(size) } : {}),
       // §9: não é preciso cachear — e melhor não cachear conteúdo autorizado por sessão.
       "Cache-Control": "private, no-store",
     },
